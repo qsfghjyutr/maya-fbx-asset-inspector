@@ -12,8 +12,10 @@ Z-up / front=-Y 的右手系(纯旋转,det +1),再用 ``FFbxConvert::ConvertPos`
 两步合成正好等于 X 不变、Y↔Z 互换,det = -1。位置与法线/切线走**同一个**变换。源码见
 ``Engine/Plugins/Interchange/.../Parsers/Fbx/Private/FbxConvert.{h,cpp}`` 与 ``FbxMesh.cpp``。
 
-未在此矩阵内建模、但 UE 也会做的事(因不影响副本在视口里的朝向,故与本模块无关):UV ``V→1-V``、
-单位缩放到 cm、binormal 额外取一次反。项目若开 ``bForceFrontXAxis``(front=+X、关节额外
+UV ``V→1-V`` 也是 UE 导入器会做的事,但它不是 3D 线性变换(UV 是 2D,且 1-V 含平移),故**不进
+``matrix``**,而由 ``CoordConvention.flip_uv_v`` 布尔标志声明、``flip_uv_v()`` 纯函数在解码前作用于
+UV 通道的 V 分量(见下)。其余 UE 也会做、但因不影响副本朝向而与本模块无关的事:单位缩放到 cm、
+binormal 额外取一次反。项目若开 ``bForceFrontXAxis``(front=+X、关节额外
 ``Rot(-90,-90,0)``),净变换会不同——届时只需改 ``CONVENTIONS`` 这一处常量,不影响其余代码。
 
 关键的正确性提示:Maya(右手)→ UE(左手)是**换手性**(矩阵行列式为负,即镜像),不是纯旋转——
@@ -27,6 +29,8 @@ Maya GUI 手测(见 ``scripts/maya_smoke_test.py`` 第 [7] 节末尾的手测清
 from __future__ import annotations
 
 from dataclasses import dataclass
+
+from .channel import ChannelData, SourceType
 
 Matrix3 = tuple[
     tuple[float, float, float], tuple[float, float, float], tuple[float, float, float]
@@ -97,6 +101,8 @@ class CoordConvention:
     up_axis: str  # 该约定下的世界上方向,"X" / "Y" / "Z"
     handedness: str  # "right" / "left"
     matrix: Matrix3 = IDENTITY
+    #: 该约定是否对 UV 的 V 分量做 V→1-V(UE 导入器行为)。与 matrix 无关——UV 非 3D 线性变换。
+    flip_uv_v: bool = False
 
     @property
     def is_mirror(self) -> bool:
@@ -121,8 +127,31 @@ CONVENTIONS: dict[str, CoordConvention] = {
         up_axis="Z",
         handedness="left",
         matrix=MAYA_TO_UE,
+        flip_uv_v=True,
     ),
 }
+
+
+def flip_uv_v(
+    channels: dict[str, ChannelData],
+    convention: CoordConvention,
+    enabled: bool = True,
+) -> dict[str, ChannelData]:
+    """按坐标约定翻转 UV 通道的 V 分量(UE 导入器对每个 UV 的 V 做 V→1-V)。
+
+    仅当 ``enabled`` 且 ``convention.flip_uv_v`` 为真时生效;只改 ``source`` 为 UV_SET 的通道的
+    ``"V"`` 分量,U 分量与顶点色通道均不受影响。在**解码之前**作用于刚读出的 ``ChannelData``,
+    因此所有解码器 / 校验器 / 可视化器看到的都是目标引擎空间的 V,忠实复现 UE"先翻 V 再解码"。
+
+    ``channels`` 里的 ``ChannelData`` 是读取层每次新建的对象(逐元素 append),故原地改
+    ``components["V"]`` 安全、不污染缓存,且保持 face-vertex 逐元素对齐。返回同一 dict 便于链式调用。
+    """
+    if not (enabled and convention.flip_uv_v):
+        return channels
+    for cd in channels.values():
+        if cd.channel.source is SourceType.UV_SET and "V" in cd.components:
+            cd.components["V"] = [1.0 - v for v in cd.components["V"]]
+    return channels
 
 
 def axis_label_map(convention: CoordConvention) -> dict[int, str]:
@@ -154,6 +183,7 @@ __all__ = [
     "apply3x3",
     "axis_label_map",
     "determinant3x3",
+    "flip_uv_v",
     "to_maya_matrix44",
     "view_rotation_from_matrix",
 ]

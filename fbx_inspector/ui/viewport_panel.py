@@ -61,6 +61,7 @@ class IsolatedMeshView:
         self._alive = False
         self._coord_id = "maya"  # 当前坐标约定;默认 Maya(恒等,不变换)
         self._mirrored = False   # content 变换当前是否已翻手性(与法线反转配对)
+        self._convert_uv = True  # 是否随约定同步转换 UV 空间(UE 的 V→1-V);默认开
 
         # 1) 复制源网格。dup 放进 content(承载坐标约定变换),content 再放进 group
         #    (只负责把整体平移到远处隐藏)。两层职责分离:变换归 content,隐藏归 group。
@@ -145,6 +146,9 @@ class IsolatedMeshView:
         self._coord_id = convention_id
         self._fit_camera()  # 姿态变了,重新取景
 
+    def set_convert_uv(self, enabled: bool) -> None:
+        """设置是否随坐标约定同步转换 UV 空间(V→1-V)。只存标志;重着色由窗口驱动(见 window)。"""
+        self._convert_uv = bool(enabled)
 
     def show_channel(self, rule, source_view) -> object:
         """按规则读取源网格通道 → 解码 → 给副本着色 → 刷新;返回 RuleResult(含校验)。
@@ -154,12 +158,15 @@ class IsolatedMeshView:
         """
         cmds = _cmds()
         from ..core.context import InspectionContext
+        from ..core.coord_convention import CONVENTIONS, flip_uv_v
         from ..core.mesh_data import MeshData
         from ..core.types import RuleResult
 
         channels = {
             role: source_view.read_channel(ch) for role, ch in rule.channel_roles.items()
         }
+        # 解码前按当前坐标约定同步转换 UV 空间(UE 的 V→1-V);预览与校验因此一致。
+        flip_uv_v(channels, CONVENTIONS[self._coord_id], self._convert_uv)
         decoded = rule.decoder.decode(channels)
 
         dup_view = MeshData(self.dup)

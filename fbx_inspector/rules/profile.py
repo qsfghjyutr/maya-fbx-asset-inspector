@@ -16,6 +16,7 @@ from typing import Protocol
 
 from ..core.channel import Channel, ChannelData
 from ..core.context import InspectionContext
+from ..core.coord_convention import CONVENTIONS, flip_uv_v
 from ..core.types import RuleResult
 from ..decode.base import Decoder
 from ..validate.base import Validator
@@ -44,6 +45,8 @@ class Rule:
         channels = {
             role: mesh.read_channel(chan) for role, chan in self.channel_roles.items()
         }
+        # 解码前按目标坐标约定同步转换 UV 空间(UE 导入器的 V→1-V);默认约定为 maya 时不动。
+        flip_uv_v(channels, CONVENTIONS[ctx.coord_convention_id], ctx.convert_uv)
         data = self.decoder.decode(channels)
 
         result = RuleResult(rule_id=self.id, label=data.label)

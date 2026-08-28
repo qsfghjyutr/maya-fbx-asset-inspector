@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from fbx_inspector.core.channel import Channel, ChannelData, SourceType
 from fbx_inspector.core.coord_convention import (
     CONVENTIONS,
     IDENTITY,
     apply3x3,
     axis_label_map,
     determinant3x3,
+    flip_uv_v,
     to_maya_matrix44,
 )
 
@@ -66,3 +68,52 @@ def test_to_maya_matrix44_identity_and_ue():
     ue44 = to_maya_matrix44(CONVENTIONS["ue"].matrix)
     assert len(ue44) == 16
     assert ue44[12:] == [0.0, 0.0, 0.0, 1.0]  # 平移列 + 齐次位
+
+
+def _uv_channel_data(u, v):
+    chan = Channel(SourceType.UV_SET, "uvSet2")
+    n = len(v)
+    return ChannelData(chan, {"U": list(u), "V": list(v)}, list(range(n)), [0] * n)
+
+
+def _color_channel_data(r):
+    chan = Channel(SourceType.COLOR_SET, "colorSet1")
+    n = len(r)
+    return ChannelData(
+        chan, {"R": list(r), "G": [0.0] * n, "B": [0.0] * n, "A": [1.0] * n},
+        list(range(n)), [0] * n,
+    )
+
+
+def test_convention_flip_uv_v_flags():
+    assert CONVENTIONS["maya"].flip_uv_v is False
+    assert CONVENTIONS["ue"].flip_uv_v is True
+
+
+def test_flip_uv_v_flips_v_only_for_ue_when_enabled():
+    # 0.25/0.75/0.0/1.0 在二进制浮点下精确可表示,1-v 不会有舍入误差。
+    cd = _uv_channel_data([0.1, 0.9], [0.25, 0.75])
+    channels = {"in": cd}
+    out = flip_uv_v(channels, CONVENTIONS["ue"], enabled=True)
+    assert out is channels  # 原地修改并返回同一 dict,便于链式调用
+    assert cd.components["V"] == [0.75, 0.25]
+    assert cd.components["U"] == [0.1, 0.9]  # U 不受影响
+    assert cd.vertex_ids == [0, 1]  # 长度与对齐关系不变
+
+
+def test_flip_uv_v_noop_for_maya_convention():
+    cd = _uv_channel_data([0.1, 0.9], [0.25, 0.75])
+    flip_uv_v({"in": cd}, CONVENTIONS["maya"], enabled=True)
+    assert cd.components["V"] == [0.25, 0.75]
+
+
+def test_flip_uv_v_noop_when_disabled():
+    cd = _uv_channel_data([0.1, 0.9], [0.25, 0.75])
+    flip_uv_v({"in": cd}, CONVENTIONS["ue"], enabled=False)
+    assert cd.components["V"] == [0.25, 0.75]
+
+
+def test_flip_uv_v_does_not_touch_color_set_channels():
+    cd = _color_channel_data([0.25, 0.75])
+    flip_uv_v({"in": cd}, CONVENTIONS["ue"], enabled=True)
+    assert cd.components["R"] == [0.25, 0.75]

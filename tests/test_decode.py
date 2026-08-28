@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from fbx_inspector.core.channel import Channel, ChannelData, SourceType
+from fbx_inspector.core.coord_convention import CONVENTIONS, flip_uv_v
 from fbx_inspector.core.types import DataKind
 from fbx_inspector.decode.builtin import (
     ScalarFromComponent,
@@ -44,3 +45,18 @@ def test_unpack_two_8bit_roundtrip():
     hi, lo = out.values[0]
     assert round(hi * 255) == 200
     assert round(lo * 255) == 50
+
+
+def test_scalar_from_component_sees_flipped_v_under_ue():
+    # 解码前先按 UE 约定翻 V,解码器应看到翻转后的值(忠实复现 UE"先翻 V 再解码")。
+    # 0.25/0.75 精确可表示,1-v 不会有舍入误差。
+    chan = Channel(SourceType.UV_SET, "uvSet2")
+    cd = ChannelData(chan, {"U": [0.1, 0.9], "V": [0.25, 0.75]}, [0, 1], [0, 0])
+    channels = {"in": cd}
+    flip_uv_v(channels, CONVENTIONS["ue"], enabled=True)
+
+    v_out = ScalarFromComponent(component="V").decode(channels)
+    assert v_out.values == [(0.75,), (0.25,)]
+
+    u_out = ScalarFromComponent(component="U").decode(channels)
+    assert u_out.values == [(0.1,), (0.9,)]  # U 不受 V 翻转影响

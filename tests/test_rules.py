@@ -2,15 +2,28 @@
 
 from __future__ import annotations
 
+from fbx_inspector.core.channel import Channel, SourceType
 from fbx_inspector.core.context import InspectionContext
-from fbx_inspector.core.types import DataKind, DecodedData, RuleResult, VisualizeInfo
+from fbx_inspector.core.types import DataKind, DecodedData, Issue, RuleResult, VisualizeInfo
 from fbx_inspector.decode.builtin import ScalarFromComponent
 from fbx_inspector.report import build_report
 from fbx_inspector.rules.profile import Profile, Rule
+from fbx_inspector.validate.base import Validator
 from fbx_inspector.validate.builtin import RangeCheck
 from fbx_inspector.visualize.colorset import ColorSetRemapVisualizer
 
-from .conftest import make_uv_mesh
+from .conftest import FakeMesh, make_uv_mesh
+
+
+class _CaptureValidator(Validator):
+    """把收到的 DecodedData 存到自身,供测试直接断言解码后的值。不产生 Issue。"""
+
+    def __init__(self) -> None:
+        self.captured: DecodedData | None = None
+
+    def validate(self, data: DecodedData) -> list[Issue]:
+        self.captured = data
+        return []
 
 
 def _ao_rule() -> Rule:
@@ -31,6 +44,48 @@ def test_rule_runs_decode_and_validate():
     assert result.rule_id == "ao_from_uv2"
     assert result.error_count == 1
     assert result.visualized is False
+
+
+def _v_rule(chan, capture: _CaptureValidator) -> Rule:
+    return Rule(
+        id="v_channel",
+        decoder=ScalarFromComponent(component="V"),
+        channel_roles={"in": chan},
+        visualizer=None,
+        validators=[capture],
+    )
+
+
+def test_rule_run_flips_v_under_ue_convention():
+    # 0.25/0.75 精确可表示,1-v 不会有舍入误差。
+    chan = Channel(SourceType.UV_SET, "uvSet2")
+    mesh = FakeMesh(
+        channels={chan: {"U": [0.1, 0.9], "V": [0.25, 0.75]}},
+        vertex_ids=[0, 1],
+        face_ids=[0, 0],
+    )
+    ctx = InspectionContext(
+        mesh_name="pSphere1", validate_only=True,
+        coord_convention_id="ue", convert_uv=True,
+    )
+    capture = _CaptureValidator()
+    _v_rule(chan, capture).run(mesh, ctx)
+    assert capture.captured is not None
+    assert capture.captured.values == [(0.75,), (0.25,)]  # V→1-V 后校验器看到的值
+
+
+def test_rule_run_default_context_does_not_flip_v():
+    chan = Channel(SourceType.UV_SET, "uvSet2")
+    mesh = FakeMesh(
+        channels={chan: {"U": [0.1, 0.9], "V": [0.25, 0.75]}},
+        vertex_ids=[0, 1],
+        face_ids=[0, 0],
+    )
+    ctx = InspectionContext(mesh_name="pSphere1", validate_only=True)  # 默认 maya,不翻
+    capture = _CaptureValidator()
+    _v_rule(chan, capture).run(mesh, ctx)
+    assert capture.captured is not None
+    assert capture.captured.values == [(0.25,), (0.75,)]  # 原样,未翻转
 
 
 def test_profile_matches_and_report_serializes():

@@ -178,9 +178,14 @@ def _make_window_class():
             for cid, conv in CONVENTIONS.items():
                 self._coord_combo.addItem(conv.label, userData=cid)
             coord_row.addWidget(self._coord_combo)
+            # UV 空间是否随坐标系同步转换(UE 导入器对 V 做 V→1-V);默认开。
+            self._convert_uv = QtWidgets.QCheckBox("转换 UV 空间 (V→1-V)")
+            self._convert_uv.setChecked(True)
+            coord_row.addWidget(self._convert_uv)
             coord_row.addStretch(1)
             root.addLayout(coord_row)
             self._coord_combo.currentIndexChanged.connect(self._apply_coord)
+            self._convert_uv.stateChanged.connect(self._apply_uv_convert)
 
             for w in (self._ramp_combo, self._curve_combo):
                 w.currentIndexChanged.connect(self._reapply)
@@ -239,8 +244,16 @@ def _make_window_class():
                 self._apply()
 
         def _apply_coord(self, *args) -> None:
-            # 只改副本在视口里的姿态,颜色数据只取决于通道读取,与世界变换无关,故不必重跑 _apply。
+            # 副本姿态与 UV 空间都随坐标约定变化:UV 的 V 现按 UE 的 V→1-V 同步转换,故约定切换后
+            # 若当前正显示 UV 通道,需重跑 _apply 让预览/校验跟上;非 UV 通道的颜色仍与世界变换无关。
             self._view.set_coord_convention(self._coord_combo.currentData())
+            if self._current is not None and self._current[0] is SourceType.UV_SET:
+                self._apply()
+
+        def _apply_uv_convert(self, *args) -> None:
+            self._view.set_convert_uv(self._convert_uv.isChecked())
+            if self._current is not None and self._current[0] is SourceType.UV_SET:
+                self._apply()
 
         def _apply(self) -> None:
             source, set_name, component = self._current

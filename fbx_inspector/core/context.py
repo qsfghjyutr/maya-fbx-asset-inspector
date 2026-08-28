@@ -19,3 +19,7 @@ class InspectionContext:
     visualize_prefix: str = "__inspector__"
     # 为 True 时只跑校验、不修改场景(批处理 / CI 场景)。
     validate_only: bool = False
+    # 目标坐标约定 id(见 core.coord_convention.CONVENTIONS);决定 UV 是否按引擎导入器变换。
+    coord_convention_id: str = "maya"
+    # 是否随坐标约定同步转换 UV 空间(UE 的 V→1-V)。默认开;仅在约定本身要求翻 V 时才实际生效。
+    convert_uv: bool = True
