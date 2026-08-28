@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "maya-fbx-asset-inspector"
+version = "0.1.0"
+description = "A Maya tool for inspecting FBX assets, including vertex colors, UVs, and customizable visualization rules."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+# 注意:maya (maya.api.OpenMaya / maya.cmds) 与 PySide6 由 Maya 2025 宿主提供,
+# 不通过 pip 安装,故不列为依赖。纯逻辑层无第三方运行时依赖。
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.11"]
+
+[tool.setuptools.packages.find]
+include = ["fbx_inspector*"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SLF"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true  # maya / PySide6 在开发环境不可用
+warn_unused_ignores = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

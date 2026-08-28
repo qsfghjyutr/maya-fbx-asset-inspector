@@ -216,3 +216,13 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# 本地专用文件,不纳入版本控制:AI 助手指令 / 会话产物,以及编辑器本地配置目录。
+CLAUDE.md
+.claude/
+.idea/
+.vscode/
+.cursor/
+.cursorrules
+.cursorignore
+.aider*
