@@ -26,14 +26,37 @@ def format_value(value: tuple[float, ...], precision: int = 3) -> str:
 
 
 def build_vertex_labels(data: DecodedData, precision: int = 3) -> dict[int, str]:
-    """合并为逐顶点标签；缝两侧的不同值分行显示。"""
+    """合并为逐顶点标签；缝两侧的不同值用明确分隔符显示。"""
     grouped: dict[int, list[str]] = {}
     for vertex_id, value in zip(data.vertex_ids, data.values):
         text = format_value(value, precision)
         values = grouped.setdefault(vertex_id, [])
         if text not in values:
             values.append(text)
-    return {vertex_id: "\n".join(values) for vertex_id, values in grouped.items()}
+    return {vertex_id: " | ".join(values) for vertex_id, values in grouped.items()}
+
+
+def build_label_payload(
+    labels: dict[int, str],
+    positions,
+    position_precision: int = 6,
+) -> list[dict[str, object]]:
+    """按空间位置合并标签，避免重合顶点的文字在视口中叠成一个数字。"""
+    grouped: dict[tuple[float, float, float], dict[str, object]] = {}
+    for vertex_id, text in sorted(labels.items()):
+        if not 0 <= vertex_id < len(positions):
+            continue
+        position = tuple(float(v) for v in positions[vertex_id])
+        key = tuple(round(v, position_precision) for v in position)
+        item = grouped.setdefault(key, {"p": position, "values": []})
+        values = item["values"]
+        for value in text.split(" | "):
+            if value not in values:
+                values.append(value)
+    return [
+        {"p": item["p"], "text": " | ".join(item["values"])}
+        for item in grouped.values()
+    ]
 
 
 class ViewportTextVisualizer(Visualizer):
@@ -76,8 +99,7 @@ class ViewportTextVisualizer(Visualizer):
         self.clear(mesh, ctx)
         labels = build_vertex_labels(data, self.precision)
         positions = mesh.vertex_positions()
-        payload = [{"p": positions[vid], "text": text}
-                   for vid, text in sorted(labels.items()) if 0 <= vid < len(positions)]
+        payload = build_label_payload(labels, positions)
         shape = cmds.createNode(NODE_TYPE, name=f"{self.node_name}Shape")
         transform = cmds.listRelatives(shape, parent=True, fullPath=True)[0]
         transform = cmds.rename(transform, self.node_name)
@@ -96,4 +118,10 @@ class ViewportTextVisualizer(Visualizer):
                 cmds.delete(node)
 
 
-__all__ = ["DEFAULT_LABEL_COLOR", "ViewportTextVisualizer", "build_vertex_labels", "format_value"]
+__all__ = [
+    "DEFAULT_LABEL_COLOR",
+    "ViewportTextVisualizer",
+    "build_label_payload",
+    "build_vertex_labels",
+    "format_value",
+]
