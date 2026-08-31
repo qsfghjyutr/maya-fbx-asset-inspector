@@ -40,10 +40,8 @@ def test_maya_axes_project_to_screen_basis():
     assert axes["Z"].depth > 0
 
 
-def test_axis_colors_follow_engine_axis_identity_not_local_axis():
-    """颜色跟着当前代表的引擎轴身份(标签字母 X/Y/Z),不跟着模型局部轴下标——切换约定后,
-    同一根局部轴改代表了别的引擎轴,其颜色必须随之改变,才能从视觉上分辨切换已生效。
-    """
+def test_axis_colors_stay_attached_to_axis_identity():
+    """方向变换不能顺带交换标签/颜色，否则 UE 的镜像会在视觉上被抵消。"""
     vr = view_rotation_from_matrix(_IDENTITY_M16)
     maya_axes = project_axes(vr, CONVENTIONS["maya"])
     ue_axes = project_axes(vr, CONVENTIONS["ue"])
@@ -52,10 +50,10 @@ def test_axis_colors_follow_engine_axis_identity_not_local_axis():
     assert maya_axes[0].color == ue_axes[0].color == (230, 66, 66)
     # 局部 Y:Maya 下代表引擎 Y(绿),UE 下代表引擎 Z(蓝)→ 颜色必须变。
     assert maya_axes[1].color == (86, 196, 108)
-    assert ue_axes[1].color == (74, 130, 240)
+    assert ue_axes[1].color == (86, 196, 108)
     # 局部 Z:Maya 下代表引擎 Z(蓝),UE 下代表引擎 Y(绿)→ 颜色必须变。
     assert maya_axes[2].color == (74, 130, 240)
-    assert ue_axes[2].color == (86, 196, 108)
+    assert ue_axes[2].color == (74, 130, 240)
 
 
 def test_ue_convention_actually_rotates_the_arrows():
@@ -68,7 +66,7 @@ def test_ue_convention_actually_rotates_the_arrows():
     assert (round(maya_axes[1].dx), round(maya_axes[1].dy)) == (0, 1)
     assert round(ue_axes[1].dx) == 0 and round(ue_axes[1].dy) == 0
     assert ue_axes[1].depth > 0
-    assert "Up" in ue_axes[1].label
+    assert ue_axes[1].label == "Y"
 
     # 局部 Z(下标 2):Maya 下指向观察者、UE 下指屏幕上。
     assert round(maya_axes[2].dx) == 0 and round(maya_axes[2].dy) == 0
@@ -77,6 +75,21 @@ def test_ue_convention_actually_rotates_the_arrows():
     # 局部 X(下标 0)在两种约定下都不变。
     assert (round(maya_axes[0].dx), round(maya_axes[0].dy)) == (1, 0)
     assert (round(ue_axes[0].dx), round(ue_axes[0].dy)) == (1, 0)
+
+
+def test_ue_labeled_axes_are_left_handed():
+    """The displayed X/Y/Z basis must preserve UE's negative determinant."""
+    vr = view_rotation_from_matrix(_IDENTITY_M16)
+    axes = _by_letter(project_axes(vr, CONVENTIONS["ue"]))
+    x = (axes["X"].dx, axes["X"].dy, axes["X"].depth)
+    y = (axes["Y"].dx, axes["Y"].dy, axes["Y"].depth)
+    z = (axes["Z"].dx, axes["Z"].dy, axes["Z"].depth)
+    det = (
+        x[0] * (y[1] * z[2] - y[2] * z[1])
+        - y[0] * (x[1] * z[2] - x[2] * z[1])
+        + z[0] * (x[1] * y[2] - x[2] * y[1])
+    )
+    assert det < 0
 
 
 def test_short_label_keeps_up_marker():
@@ -97,4 +110,4 @@ def test_ue_and_maya_up_marker_lands_on_different_local_axes():
     maya_labels = [short_label(a.label) for a in project_axes(vr, CONVENTIONS["maya"])]
     ue_labels = [short_label(a.label) for a in project_axes(vr, CONVENTIONS["ue"])]
     assert maya_labels == ["X", "Y↑", "Z"]
-    assert ue_labels == ["X", "Z↑", "Y"]
+    assert ue_labels == ["X", "Y", "Z↑"]

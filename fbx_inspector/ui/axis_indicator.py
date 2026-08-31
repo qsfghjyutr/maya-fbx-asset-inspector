@@ -4,10 +4,8 @@
 当前坐标约定**(切到 UE 时轴的朝向会真的转过去,不只是文字标签变)——类似 Blender/Unity 的导航
 gizmo。Maya 自带的角落轴永远显示 Maya 世界(Y-up),无法表达 UE 约定,故自绘。
 
-颜色按**引擎轴身份**(标签字母 X/Y/Z)固定取,不按模型局部轴下标取:X 红 / Y 绿 / Z 蓝,是
-业界通用的配色语义(跟 Maya 操纵杆一致)。切换坐标约定时,同一根局部轴代表的引擎轴会变
-(如 Maya 的局部 Y 在 UE 下变成 Z),于是它的颜色也跟着变:切到 UE 后,代表 Up 的轴应显示成
-Z 的颜色(蓝),而非固定让局部 Y 恒为绿。
+颜色和标签始终绑定 X/Y/Z 轴身份:X 红 / Y 绿 / Z 蓝。切换坐标约定时只变换三根箭头的方向;
+若方向和标签同时交换,UE 的镜像会被视觉抵消,使左手系错误地显示成右手系。
 
 分两层:
 - ``project_axes`` / ``ProjectedAxis`` 是**纯函数**(只依赖 core.coord_convention),把"世界→相机旋转 +
@@ -20,7 +18,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ..core.coord_convention import CoordConvention, Matrix3, apply3x3, axis_label_map
+from ..core.coord_convention import CoordConvention, Matrix3, apply3x3
 
 # 轴基色(0-255),按**引擎轴身份**(标签字母)固定,不按模型局部轴下标固定——
 # X 永远红、Y 永远绿、Z 永远蓝。这样切换坐标约定时"谁是 Up"的颜色会跟着变
@@ -30,6 +28,8 @@ _AXIS_COLOR_BY_LETTER: dict[str, tuple[int, int, int]] = {
     "Y": (86, 196, 108),
     "Z": (74, 130, 240),
 }
+
+_AXIS_NAMES = ("X", "Y", "Z")
 
 
 def _axis_letter(label: str) -> str:
@@ -62,13 +62,15 @@ def project_axes(view_rot: Matrix3, convention: CoordConvention) -> list[Project
     于是指示器与被变换的模型始终同步,切换约定时箭头会转动**且**当前代表 Up 的那根箭头颜色
     也会变成对应引擎轴的颜色(如 Maya 下 Up=局部 Y 显绿色,切到 UE 后 Up=局部 Z 显蓝色)。
     """
-    labels = axis_label_map(convention)
     out: list[ProjectedAxis] = []
     for i in range(3):
         basis = tuple(1.0 if j == i else 0.0 for j in range(3))
         world_dir = convention.apply(basis)  # type: ignore[arg-type]
         cam = apply3x3(view_rot, world_dir)
-        label = labels[i]
+        # Keep the original axis identity after transforming its direction.
+        # Remapping both direction and label would visually cancel UE's mirror.
+        axis_name = _AXIS_NAMES[i]
+        label = f"{axis_name} (Up)" if axis_name == convention.up_axis else axis_name
         out.append(
             ProjectedAxis(
                 label=label,
