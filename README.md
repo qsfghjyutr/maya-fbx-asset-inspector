@@ -23,13 +23,12 @@ asset convention — no forking required.
 
 ### Status
 
-Version 0.1. The Maya-free layers (decode / validate / rules / report / registry) are implemented
-and unit-tested. The core Maya path (mesh reads + color-set visualizer) has been verified in Maya
-2025 via `scripts/maya_smoke_test.py`. The PySide6 inspector window, isolated embedded viewport,
-coordinate-convention preview, and axis indicator are implemented; because `modelPanel` requires a
-Maya GUI, those UI paths require interactive testing. Version 2.0 development adds numeric labels
-beside vertices through a Viewport 2.0 DrawOverride, with adjustable font size. Vector-arrow
-visualization is deferred to an unspecified later release.
+Version 0.1. The Maya-free layers are covered by the zero-dependency test suite. The Maya path
+includes mesh reads, color-set visualization, a floating PySide6 inspector with an isolated
+embedded viewport, preset-based batch inspection, Maya/UE coordinate previews, a handedness-aware
+axis indicator, and numeric vertex labels through a Viewport 2.0 DrawOverride. `modelPanel` and
+DrawOverride rendering still require final interactive verification in the Maya GUI. Vector-arrow
+visualization remains deferred.
 
 ### Requirements
 
@@ -88,16 +87,110 @@ open_inspector()          # or open_inspector("meshName")
 ```
 
 Click R/G/B/A to view color-set components, U/V for UV sets; adjust ramp / normalize / curve. Enable
-numeric values to label the corresponding vertices and adjust their font size. Repeated
-face-vertex values are collapsed per vertex; distinct seam values are shown on separate lines. The
-window shows a temporary offset duplicate in its embedded panel and removes it when closed.
+numeric values to label the corresponding vertices and adjust their font size. Repeated values are
+deduplicated; distinct values belonging to the same or coincident vertices use an explicit
+separator such as `1 | 0.01`, avoiding ambiguous overdraw. The window shows a temporary offset
+duplicate in its embedded panel and removes it when closed.
+
+The **Inspection preset** selector runs every Rule in a Profile with one click and combines their
+results into one report. The built-in **Default** preset checks `colorSet1` R/G/B/A against [0, 1]
+and creates four grayscale display color sets. After batch execution, the channel that was being
+viewed manually is refreshed and restored instead of leaving the viewport on the preset's last
+rule.
 
 ### Your own rules (never overwritten by updates)
 
 Put your rule `.py` files and config tables in a folder **separate** from the core package, so
 system updates don't touch them: set `FBX_INSPECTOR_RULE_PATH`, or use the repo's `user_rules/`,
-or `~/.fbx_inspector/rules`. Then `fbx_inspector.plugins.discover()` loads examples + your rules.
-Copy `user_rules/_template.py` to get started.
+or `~/.fbx_inspector/rules`. Copy `user_rules/_template.py` to a filename that does not start with
+`_`, edit its Profile, and reopen the inspector from the shelf. Registered Profiles appear
+automatically in the preset selector; no core-package edits are required. Direct calls to
+`plugins.discover()` still load shipped examples plus user rules, while the production inspector
+intentionally lists the built-in default and user Profiles only.
+
+### Project structure
+
+The tree below covers only maintained project files that are version-controlled or intended for
+the current change.
+
+```text
+maya-fbx-asset-inspector/
+├─ fbx_inspector/                    Main Python package
+│  ├─ __init__.py                    Package metadata; safe to import outside Maya
+│  ├─ api.py                         Public run_profile / clear_visualizations API
+│  ├─ plugins.py                     Discovers built-in examples and user rule files
+│  ├─ report.py                      Text/JSON inspection report assembly
+│  ├─ maya_plugin.py                 Aggregates Maya plugin registration entry points
+│  ├─ core/                          Shared data model and infrastructure
+│  │  ├─ __init__.py                 Core package marker
+│  │  ├─ channel.py                  Channel types and face-vertex channel data
+│  │  ├─ context.py                  Options shared by one inspection run
+│  │  ├─ coord_convention.py         Maya/UE axes, handedness, matrices, and UV-V conversion
+│  │  ├─ mesh_data.py                Maya API mesh and color/UV-set access
+│  │  ├─ registry.py                 Decoder, visualizer, validator, and Profile registries
+│  │  ├─ remap.py                    Ramp curves and interpolation presets
+│  │  └─ types.py                    Decoded values, issues, results, and visualization metadata
+│  ├─ decode/                        Raw-channel decoding
+│  │  ├─ __init__.py                 Decoder package exports
+│  │  ├─ base.py                     Decoder base class and input-role validation
+│  │  └─ builtin.py                  Scalar, vector, and packed-value decoders
+│  ├─ validate/                      Decoded-data checks
+│  │  ├─ __init__.py                 Validator package exports
+│  │  ├─ base.py                     Validator interface
+│  │  └─ builtin.py                  Range, finite, normalized, and constant checks
+│  ├─ visualize/                     Viewport output implementations
+│  │  ├─ __init__.py                 Visualizer package exports
+│  │  ├─ base.py                     Visualizer base class, ramps, and clamp helpers
+│  │  ├─ colorset.py                 Scalar-to-color-set heatmap visualization
+│  │  ├─ viewport.py                 Numeric-label formatting, grouping, and node payloads
+│  │  └─ viewport_plugin.py          VP2 locator and MPxDrawOverride text drawing
+│  ├─ rules/                         Rule and Profile composition
+│  │  ├─ __init__.py                 Rules package marker
+│  │  └─ profile.py                  Rule execution and named multi-rule Profile presets
+│  ├─ presets/                       Production presets shown by the inspector
+│  │  ├─ __init__.py                 Preset package exports
+│  │  └─ default.py                  Built-in colorSet1 RGBA default preset
+│  ├─ examples/                      Programmatic API examples, not production UI presets
+│  │  ├─ __init__.py                 Registers shipped examples when imported
+│  │  └─ vertex_color_channels.py    Per-channel vertex-color Profile example
+│  └─ ui/                            Maya/PySide inspector interface
+│     ├─ __init__.py                 Lazy open_inspector export
+│     ├─ axis_indicator.py           Camera-following Maya/UE handedness indicator
+│     ├─ channels.py                 Manual channel-selection Rule factory
+│     ├─ viewport_panel.py           Isolated duplicate, camera, and embedded modelPanel
+│     └─ window.py                   Floating window, preset runner, controls, and report pane
+├─ user_rules/                       User-owned preset and rule area
+│  ├─ _template.py                   Copyable preset matching the built-in default
+│  └─ README.md                      User preset authoring and discovery instructions
+├─ scripts/                          Development and Maya verification helpers
+│  ├─ maya_smoke_test.py             Headless mayapy integration smoke test
+│  └─ reload_dev.py                  Removes cached modules during Maya development
+├─ tests/                            Maya-free automated test suite
+│  ├─ __init__.py                    Test package marker
+│  ├─ conftest.py                    Test import-path/bootstrap setup
+│  ├─ test_axis_indicator.py         Axis projection and UE handedness regressions
+│  ├─ test_channels.py               Manual channel Rule factory tests
+│  ├─ test_context.py                Inspection-context default tests
+│  ├─ test_coord_convention.py       Coordinate and UV conversion tests
+│  ├─ test_decode.py                 Built-in decoder tests
+│  ├─ test_examples.py               Shipped example Profile tests
+│  ├─ test_plugins.py                User rule discovery/loading tests
+│  ├─ test_presets.py                Default preset registration tests
+│  ├─ test_remap.py                  Ramp curve tests
+│  ├─ test_rules.py                  Rule/Profile execution and report tests
+│  ├─ test_validate.py               Built-in validator tests
+│  └─ test_viewport_text.py          Numeric formatting and coincident-label tests
+├─ fbx_inspector_plugin.py           Trusted Maya plug-in bridge installed per user
+├─ install.py                        Drag-and-drop Maya installer and uninstaller
+├─ run_tests.py                      Zero-dependency test runner
+├─ pyproject.toml                    Packaging, Python, pytest, Ruff, and mypy configuration
+├─ README.md                         User-facing English/Chinese guide
+├─ DESIGN.md                         Architecture, invariants, and implementation decisions
+├─ LICENSE                           Project license
+├─ .editorconfig                     Cross-editor whitespace conventions
+├─ .gitattributes                    Git text and attribute rules
+└─ .gitignore                        Files excluded from version control
+```
 
 ### Concepts
 
@@ -108,7 +201,8 @@ Copy `user_rules/_template.py` to get started.
 - **Validator** — checks decoded data (range, NaN/Inf, normalized, constant) and reports
   issues located at exact face-vertices.
 - **Rule / Profile** — a Rule binds channels to a decoder and pairs it with a visualizer +
-  validators; a Profile bundles rules for a studio's asset convention.
+  validators; a Profile is a named, described preset with an optional asset-name matcher and any
+  number of Rules.
 
 The pipeline's unit is the **face-vertex**, so hard edges and UV seams are handled correctly
 rather than averaged away. See [DESIGN.md](DESIGN.md).
@@ -166,11 +260,10 @@ fork。
 
 ### 现状
 
-当前版本为 v0.1。与 Maya 无关的各层(解码 / 校验 / 规则 / 报告 / 注册表)已实现并有单元测试。
-核心 Maya 链路(网格读取 + color set 可视化)已通过 `scripts/maya_smoke_test.py` 在 Maya 2025
-内验证。PySide6 检查窗口、内嵌隔离视口、坐标约定预览和方向指示器均已实现;由于
-`modelPanel` 依赖 Maya GUI,这些 UI 链路仍需交互式测试。2.0 开始加入基于 Viewport 2.0
-DrawOverride 的顶点旁数值标签,并支持调整字号。向量箭头可视化已推迟到未指定的后续版本。
+当前版本为 v0.1。与 Maya 无关的各层由零依赖测试覆盖。Maya 链路现已包括网格读取、color set
+可视化、带隔离视口的 PySide6 浮动窗口、多预设一键检查、Maya/UE 坐标预览、能正确表达手性的
+方向指示器，以及基于 Viewport 2.0 DrawOverride 的顶点数值标签。`modelPanel` 与 DrawOverride
+的最终绘制效果仍需在 Maya GUI 中交互验证。向量箭头可视化仍留待后续版本。
 
 ### 环境要求
 
@@ -228,13 +321,103 @@ open_inspector()          # 或 open_inspector("网格名")
 
 点 R/G/B/A 看 color set 分量,U/V 看 UV set;可调色带 / 归一化 / 曲线。窗口在其内嵌面板里显示一份
 偏移到远处的临时副本,关闭时自动移除。开启“显示数值”后,所选通道的数值会标在对应顶点旁,
-字号可调;同一顶点的重复值会合并,缝两侧的不同值则分行显示。
+字号可调;重复值会去重,同一顶点或空间重合顶点的不同值用 `1 | 0.01` 这样的明确分隔符合并,
+避免文字重叠成 `10.01`。
+
+“检查预设”下拉框可以一键执行一个 Profile 中的全部 Rule,并把结果合并成一份报告。内置
+“默认”预设检查 `colorSet1` 的 R/G/B/A 是否位于 [0,1],同时生成四套灰度显示 color set。
+批量执行结束后会自动刷新并恢复执行前手动查看的通道,不会停留在最后一条预设规则上。
 
 ### 你自己的规则(系统更新不覆盖)
 
 把规则 `.py` 与配置表放在**独立于核心包**的目录,系统升级不会动它们:设置环境变量
-`FBX_INSPECTOR_RULE_PATH`,或用仓库的 `user_rules/`,或 `~/.fbx_inspector/rules`。随后
-`fbx_inspector.plugins.discover()` 会加载示例 + 你的规则。复制 `user_rules/_template.py` 起步。
+`FBX_INSPECTOR_RULE_PATH`,或用仓库的 `user_rules/`,或 `~/.fbx_inspector/rules`。复制
+`user_rules/_template.py` 并改成不以下划线开头的文件名,编辑并登记 Profile,再从工具架重开
+检查器;用户预设会自动出现在下拉框中,无需修改核心包。直接调用 `plugins.discover()` 仍会加载
+内置示例和用户规则;正式检查器只列出内置默认预设与用户 Profile。
+
+### 项目结构
+
+下面只列出受版本控制或将在当前变更中纳入版本控制的项目文件。
+
+```text
+maya-fbx-asset-inspector/
+├─ fbx_inspector/                    主 Python 包
+│  ├─ __init__.py                    包元数据;可在 Maya 外安全导入
+│  ├─ api.py                         run_profile / clear_visualizations 公共 API
+│  ├─ plugins.py                     发现内置示例与用户规则文件
+│  ├─ report.py                      组装文本和 JSON 检查报告
+│  ├─ maya_plugin.py                 汇总 Maya 插件注册入口
+│  ├─ core/                          共享数据模型与基础设施
+│  │  ├─ __init__.py                 core 包标记
+│  │  ├─ channel.py                  通道类型与逐面顶点通道数据
+│  │  ├─ context.py                  单次检查共享选项
+│  │  ├─ coord_convention.py         Maya/UE 轴、手性、矩阵与 UV-V 转换
+│  │  ├─ mesh_data.py                Maya API 网格及 color/UV set 访问
+│  │  ├─ registry.py                 Decoder、Visualizer、Validator、Profile 注册表
+│  │  ├─ remap.py                    Ramp 曲线与插值预设
+│  │  └─ types.py                    解码数据、问题、结果和可视化元数据
+│  ├─ decode/                        原始通道解码
+│  │  ├─ __init__.py                 Decoder 包导出
+│  │  ├─ base.py                     Decoder 基类与输入角色校验
+│  │  └─ builtin.py                  标量、向量和打包数值解码器
+│  ├─ validate/                      解码数据校验
+│  │  ├─ __init__.py                 Validator 包导出
+│  │  ├─ base.py                     Validator 接口
+│  │  └─ builtin.py                  范围、有限值、归一化和常量检查
+│  ├─ visualize/                     视口输出实现
+│  │  ├─ __init__.py                 Visualizer 包导出
+│  │  ├─ base.py                     Visualizer 基类、色带和 clamp 工具
+│  │  ├─ colorset.py                 标量到 color set 热力图可视化
+│  │  ├─ viewport.py                 数值标签格式、重合合并与节点载荷
+│  │  └─ viewport_plugin.py          VP2 locator 与 MPxDrawOverride 文字绘制
+│  ├─ rules/                         Rule 与 Profile 组合
+│  │  ├─ __init__.py                 rules 包标记
+│  │  └─ profile.py                  Rule 执行和具名多规则 Profile 预设
+│  ├─ presets/                       检查器显示的正式预设
+│  │  ├─ __init__.py                 预设包导出
+│  │  └─ default.py                  内置 colorSet1 RGBA 默认预设
+│  ├─ examples/                      编程 API 示例,不进入正式 UI 预设列表
+│  │  ├─ __init__.py                 导入时登记随附示例
+│  │  └─ vertex_color_channels.py    逐通道顶点色 Profile 示例
+│  └─ ui/                            Maya/PySide 检查器界面
+│     ├─ __init__.py                 惰性导出 open_inspector
+│     ├─ axis_indicator.py           随相机转动的 Maya/UE 手性指示器
+│     ├─ channels.py                 手动选择通道的 Rule 工厂
+│     ├─ viewport_panel.py           隔离副本、相机与内嵌 modelPanel
+│     └─ window.py                   浮动窗口、预设执行、控件与报告区
+├─ user_rules/                       用户拥有的预设与规则目录
+│  ├─ _template.py                   与内置默认配置一致的可复制模板
+│  └─ README.md                      用户预设编写与发现说明
+├─ scripts/                          开发及 Maya 验证工具
+│  ├─ maya_smoke_test.py             mayapy 无头集成冒烟测试
+│  └─ reload_dev.py                  Maya 开发时移除缓存模块
+├─ tests/                            不依赖 Maya 的自动化测试
+│  ├─ __init__.py                    测试包标记
+│  ├─ conftest.py                    测试导入路径与启动配置
+│  ├─ test_axis_indicator.py         坐标轴投影及 UE 手性回归测试
+│  ├─ test_channels.py               手动通道 Rule 工厂测试
+│  ├─ test_context.py                检查上下文默认值测试
+│  ├─ test_coord_convention.py       坐标及 UV 转换测试
+│  ├─ test_decode.py                 内置 Decoder 测试
+│  ├─ test_examples.py               随附示例 Profile 测试
+│  ├─ test_plugins.py                用户规则发现与加载测试
+│  ├─ test_presets.py                默认预设注册测试
+│  ├─ test_remap.py                  Ramp 曲线测试
+│  ├─ test_rules.py                  Rule/Profile 执行与报告测试
+│  ├─ test_validate.py               内置 Validator 测试
+│  └─ test_viewport_text.py          数值格式和重合标签测试
+├─ fbx_inspector_plugin.py           安装到用户目录的可信 Maya 插件桥
+├─ install.py                        Maya 拖拽安装器与卸载器
+├─ run_tests.py                      零依赖测试运行器
+├─ pyproject.toml                    打包、Python、pytest、Ruff、mypy 配置
+├─ README.md                         面向用户的中英文说明
+├─ DESIGN.md                         架构、不变量与实现决策
+├─ LICENSE                           项目许可证
+├─ .editorconfig                     跨编辑器空白约定
+├─ .gitattributes                    Git 文本及属性规则
+└─ .gitignore                        版本控制排除规则
+```
 
 ### 核心概念
 
@@ -244,8 +427,8 @@ open_inspector()          # 或 open_inspector("网格名")
   顶点数值标签走 Viewport 2.0 DrawOverride。向量箭头已推迟。
 - **Validator(校验器)**—— 校验解码数据(范围、NaN/Inf、归一化、常量),并把问题精确定位到
   面顶点。
-- **Rule / Profile(规则 / 配置档)**—— Rule 把通道绑定到解码器,再配可视化器 + 校验器;
-  Profile 按工作室资产规范打包一组规则。
+- **Rule / Profile(规则 / 预设)**—— Rule 把通道绑定到解码器,再配可视化器 + 校验器;
+  Profile 带显示名称、说明和可选资产名匹配器,按工作室规范打包任意数量的规则。
 
 流水线的基本单位是**面顶点(face-vertex)**,因此硬边与 UV 缝会被正确处理,而非被平均掉。
 详见 [DESIGN.md](DESIGN.md)。

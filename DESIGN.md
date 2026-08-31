@@ -51,6 +51,7 @@ fbx_inspector/
     viewport.py   顶点数值文字 → VP2 DrawOverride                    仅 Maya,惰性
     viewport_plugin.py  数值标签 locator + MPxDrawOverride          仅 Maya
   rules/      # Rule / Profile:把通道绑定到角色,打包 解码+可视化+校验   与 Maya 无关
+  presets/    # 内置默认 Profile;与 user_rules/_template.py 保持同一基准配置
   report.py   # RuleResult / Report,文本 + json                    与 Maya 无关
   api.py      # 高层编排入口
   ui/         # PySide6 浮动窗口 + 内嵌隔离视口                     仅 Maya,惰性
@@ -83,15 +84,17 @@ Rule(
 )
 ```
 
-一个 **Profile(配置档)** 是一组带可选资产名匹配器的具名规则集合,因此工作室可以把"我们的环境道具
-规范"作为一个可导入的对象整体交付。Profile 是预期中按项目定制的基本单位。
+一个 **Profile(检查预设)** 是一组带显示名称、说明和可选资产名匹配器的具名规则集合,因此工作室
+可以把“我们的环境道具规范”作为一个对象整体交付。检查器会把内置默认 Profile 与用户登记的
+Profile 放进预设下拉框,一键依次执行全部 Rule 并汇总报告。单条规则失败会被记录,不会阻断其余规则。
 
 ## 可视化策略(按数据类型分层)
 
 - **标量 / 颜色** → 重映射进一个临时**显示 color set**,让 Maya 原生的"显示顶点色"来渲染。简单、
   稳健、无需自定义绘制代码。这是 v1 的主力。
 - **数值文字** → 用 Viewport 2.0 的 **`MPxDrawOverride`**,通过 `MUIDrawManager` 在对应几何顶点旁
-  绘制所选通道的数值,并支持调整字号。相同面顶点值按顶点去重,缝两侧的不同值分行显示。
+  绘制所选通道的数值,并支持调整字号。同一顶点的重复值去重;面顶点缝值以及空间重合但 vertex ID
+  不同的顶点按位置合并,用 ` | ` 明确分隔,避免两个标签叠成一个误导性数字。
 - **向量 / 方向** → 箭头可视化不属于 2.0,已推迟到未指定的后续版本。
 
 ## 曲线重映射(Ramp,chramp 式)
@@ -110,15 +113,17 @@ Rule(
 2. 仓库根 `user_rules/`(你新增的文件是 git 未跟踪的,更新不动它);
 3. 用户主目录 `~/.fbx_inspector/rules`。
 
-文件名以下划线开头者被跳过(模板/私有)。`plugins.discover()` 会先加载内置示例
-(`fbx_inspector/examples/`,随核心分发,是可直接用的范本),再加载上述用户目录。
+文件名以下划线开头者被跳过(模板/私有)。`plugins.discover()` 默认先加载内置示例再加载用户目录;
+检查器启动时使用 `include_examples=False`,另外显式注册 `presets/default.py`,因此正式预设列表
+初始只有“默认”,随后追加用户 Profile。`user_rules/_template.py` 与默认预设采用相同规则结构,
+复制并去掉文件名前导下划线即可创建新预设。
 
 ## 独立 GUI 检查窗口(嵌入隔离面板)
 
-`ui/window.py` 的 `InspectorWindow`(PySide6 浮动窗口)提供一个**独立**的检查界面:像 UV 编辑器
-那样点 R/G/B/A 看 color set 分量、点 U/V 看 UV set 分量,可调色带 / 归一化 / `Ramp` 曲线,可切换
-**坐标约定**(见下),底部显示校验报告。归一化开关旁实时显示当前通道的 min/max,让用户知道颜色是
-按哪个区间归一化出来的(同一区间也写进文本/json 报告)。
+`ui/window.py` 的 `InspectorWindow`(PySide6 浮动窗口)提供一个**独立**的检查界面:既可像 UV
+编辑器那样手动点 R/G/B/A 或 U/V,也可从“检查预设”中一键执行 Profile 的全部规则。预设生成的
+各套 color set 都会保留,最后再重新应用执行前手动选中的通道,使当前画面立即刷新且不被最后一条
+规则取代;底部仍显示完整预设报告。窗口还支持色带、归一化、`Ramp`、数值标签和坐标约定。
 
 窗口中部内嵌一个**隔离的 Maya 视口**(`ui/viewport_panel.py` 的 `IsolatedMeshView`):复制目标网格
 到远处的专属组,建专属相机与 `modelPanel`,用 `MQtUtil.findControl` + `wrapInstance` 把面板的 QWidget
@@ -158,6 +163,9 @@ Maya 每次启动并自动加载桥时都会读取仓库当时的最新版,因�
 导航 gizmo(Maya 自带角落轴只会显示 Maya 世界,无法表达 UE 约定,故自绘)。投影数学(世界→相机旋转 +
 约定 → 屏幕方向)是 Maya-free 纯函数可单测,只有 Qt 绘制 + 相机姿态查询需 GUI 手测。
 
+指示器只变换箭头方向,标签与颜色始终绑定原本的 X/Y/Z 身份;不能在变换方向后再次按结果交换标签,
+否则 UE 的 Y/Z 镜像会在视觉上被抵消。回归测试会按显示标签重建三轴并验证 UE 行列式小于 0。
+
 关键正确性点:**Maya(右手)→ UE(左手)是换手性(镜像),不是纯旋转**——矩阵行列式为 -1,纯旋转做
 不到。`CoordConvention.is_mirror` 由行列式推出(不手工维护),`IsolatedMeshView.set_coord_convention`
 据此在切到镜像约定时对副本反转一次法线/绕序,补偿背面朝外。变换只作用在副本的 `content` 变换节点上,
@@ -166,11 +174,10 @@ Maya 每次启动并自动加载桥时都会读取仓库当时的最新版,因�
 
 ## 路线图
 
-1. **v1(已落地)** —— 扎实的逐面顶点读取、color set 重映射可视化器、内置解码器/校验器、
-   独立 GUI 检查窗口(嵌入隔离面板)、文本/json 报告。
-2. **2.0(进行中)** —— DrawOverride 顶点数值标签与可调字号。
-3. 面向 CI 的批处理 / 无头校验,由 Profile 驱动。
-4. 可选的 FBX SDK 直连解析,用于交叉校验 Maya 导入的保真度。
+1. **当前已落地** —— 逐面顶点读取、color set 重映射、内置解码器/校验器、DrawOverride 数值
+   标签、隔离 GUI、多预设一键执行、Maya/UE 坐标预览、文本/json 报告。
+2. 面向 CI 的批处理 / 无头校验,由 Profile 驱动。
+3. 可选的 FBX SDK 直连解析,用于交叉校验 Maya 导入的保真度。
 
 向量箭头(法线 / 流向)已从 2.0 移出,暂不绑定到 3.0 或其他具体版本。
 

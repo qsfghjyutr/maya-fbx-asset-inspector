@@ -8,12 +8,18 @@
 
 1. 复制本目录下的 `_template.py` 为你自己的文件，例如 `my_studio_rules.py`
    （**不要**用下划线开头命名——下划线开头的文件会被加载器当作模板跳过）。
-2. 在文件里定义你的 `Decoder` / `Validator`，并用 `register_profile(...)` 登记配置档。
-3. 让系统发现它们：
+2. 修改 `_build_profile()` 中的 Rule。可以只组合内置 Decoder / Visualizer / Validator，也可以在
+   同一文件里定义自己的实现。
+3. 为每个 Profile 设置唯一 `id`、界面名称 `name`、说明 `description` 和可选的
+   `match_pattern`，然后用 `register_profile(..., overwrite=True)` 登记。一个文件可以登记多套预设。
+4. 从 Maya 工具架重新打开 FBX Inspector。检查器会自动扫描用户目录，新 Profile 会出现在
+   “检查预设”下拉框中；点击“一键执行全部规则”即可运行该 Profile 的所有检查和可视化规则。
+
+也可以脱离 UI 手动检查注册结果：
 
    ```python
    from fbx_inspector import plugins
-   plugins.discover()            # 加载内置示例 + 所有用户规则目录
+   plugins.discover()            # API 默认加载内置示例 + 所有用户规则目录
    from fbx_inspector.core.registry import PROFILES
    print(PROFILES.ids())         # 应能看到你登记的配置档 id
    ```
@@ -28,3 +34,15 @@
 3. 用户主目录 `~/.fbx_inspector/rules`。
 
 配置表等数据文件也可以放在这些目录里，由你的规则代码自行读取。
+
+## 默认预设与 Template
+
+内置“默认”预设与 `_template.py` 都检查 `colorSet1` 的 R/G/B/A 是否位于 [0,1]，并为四个
+分量分别生成灰度显示 color set。Template 是可编辑副本的起点，不会被加载器直接执行。
+
+注意：
+
+- 文件名必须以 `.py` 结尾且不能以下划线开头；
+- 修改已加载的规则后，应重新点击 FBXi 工具架按钮，让模块缓存和注册表一起重载；
+- 多套 Profile 的 `id` 不应重复；有意替换同 id 时使用 `overwrite=True`；
+- 预设批量执行后，检查器会恢复并刷新执行前正在手动查看的通道，同时保留完整预设报告。
