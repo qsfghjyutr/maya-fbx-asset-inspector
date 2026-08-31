@@ -6,7 +6,14 @@
 安装内容:
   1. 把本仓库根目录加入当前会话的 sys.path(立即可用);
   2. 写入 <maya>/scripts/userSetup.py(幂等),使重启 Maya 后仍能 import;
-  3. 在当前工具架上创建一个 "FBXi" 按钮,点击即打开检查窗口。
+  3. 在 Maya 用户 plug-ins 目录安装一个通用可信加载桥,实际插件代码仍从仓库读取;
+  4. 在当前工具架上创建一个 "FBXi" 按钮,点击即重载并打开检查窗口。
+
+为何需要加载桥:Inspector 本体是普通 Python 包,加入 sys.path 即可,不会经过 Maya 的插件安全
+检查;数值标签使用 MPxLocatorNode / MPxDrawOverride,必须由 cmds.loadPlugin 注册。若直接从仓库
+加载,Maya 会把仓库判为非可信插件位置并在每个新会话警告。可信目录中只复制一个通用稳定入口,
+所有当前及未来的 Maya 插件模块都通过它注册;功能实现仍从仓库导入,因此保留“一次安装、仓库代码
+自动更新”的开发体验。
 
 仓库位置由本文件的 ``__file__`` 自动推导,**不含任何硬编码路径**。
 
@@ -19,6 +26,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import sys
 
 # 仓库根目录 = 本文件所在目录。自动推导,绝不硬编码。
@@ -36,6 +44,11 @@ open_inspector()"""
 _MARK_BEGIN = "# >>> fbx_inspector path >>>"
 _MARK_END = "# <<< fbx_inspector path <<<"
 _BUTTON_LABEL = "FBX Inspector"
+_PLUGIN_ID = "fbx_inspector_plugin"
+_PLUGIN_FILENAME = f"{_PLUGIN_ID}.py"
+_PLUGIN_LOADER = os.path.join(_REPO, _PLUGIN_FILENAME)
+_LEGACY_PLUGIN_IDS = ("fbx_inspector_viewport", "viewport_plugin")
+_LABEL_NODE_TYPE = "fbxInspectorValueLabels"
 
 
 def _ensure_on_path() -> None:
@@ -76,6 +89,68 @@ def _persist_path() -> str:
     return us
 
 
+def _plugin_target() -> str:
+    """当前 Maya 版本的用户插件目录中的通用加载桥路径。"""
+    import maya.cmds as cmds  # type: ignore[import-not-found]
+
+    directory = os.path.join(
+        cmds.internalVar(userAppDir=True), str(cmds.about(version=True)), "plug-ins"
+    )
+    return os.path.join(directory, _PLUGIN_FILENAME)
+
+
+def _plugin_loaded(plugin_id: str) -> bool:
+    import maya.cmds as cmds  # type: ignore[import-not-found]
+
+    try:
+        return bool(cmds.pluginInfo(plugin_id, query=True, loaded=True))
+    except RuntimeError:
+        return False
+
+
+def _remove_label_nodes() -> None:
+    import maya.cmds as cmds  # type: ignore[import-not-found]
+
+    for shape in cmds.ls(type=_LABEL_NODE_TYPE, long=True) or []:
+        parents = cmds.listRelatives(shape, parent=True, fullPath=True) or []
+        cmds.delete(parents[0] if parents else shape)
+
+
+def _unload_inspector_plugins() -> None:
+    """卸载通用可信桥及旧版 Viewport 专用加载入口。"""
+    import maya.cmds as cmds  # type: ignore[import-not-found]
+
+    loaded = [
+        plugin_id for plugin_id in (_PLUGIN_ID, *_LEGACY_PLUGIN_IDS)
+        if _plugin_loaded(plugin_id)
+    ]
+    if not loaded:
+        return
+    _remove_label_nodes()
+    for plugin_id in loaded:
+        cmds.unloadPlugin(plugin_id, force=True)
+
+
+def _install_plugin_bridge() -> str:
+    """安装通用稳定加载桥；所有功能实现始终来自仓库。"""
+    import maya.cmds as cmds  # type: ignore[import-not-found]
+
+    target = _plugin_target()
+    os.makedirs(os.path.dirname(target), exist_ok=True)
+    _unload_inspector_plugins()
+    legacy_bridge = os.path.join(os.path.dirname(target), "fbx_inspector_viewport.py")
+    if os.path.exists(legacy_bridge):
+        os.remove(legacy_bridge)
+    shutil.copy2(_PLUGIN_LOADER, target)
+    # 自动加载可能早于 userSetup.py,故把仓库位置写入桥的已安装副本。这里只写路径配置,
+    # Viewport 功能实现仍留在仓库,不会被复制。
+    with open(target, "a", encoding="utf-8") as f:
+        f.write(f"\n_REPO_OVERRIDE = {_REPO!r}\n")
+    cmds.loadPlugin(target, quiet=True)
+    cmds.pluginInfo(_PLUGIN_ID, edit=True, autoload=True)
+    return target
+
+
 def _current_shelf() -> str:
     import maya.cmds as cmds  # type: ignore[import-not-found]
     import maya.mel as mel  # type: ignore[import-not-found]
@@ -111,17 +186,19 @@ def _make_button(shelf: str) -> str:
 
 
 def install() -> None:
-    """执行安装:加 path、写 userSetup、建工具架按钮。"""
+    """执行安装:加 path、写 userSetup、安装插件桥、建工具架按钮。"""
     _ensure_on_path()
     us = _persist_path()
+    bridge = _install_plugin_bridge()
     shelf = _current_shelf()
     _make_button(shelf)
     print(f"[FBX Inspector] 已在工具架 '{shelf}' 上创建按钮。")
     print(f"[FBX Inspector] 路径已写入 {us},重启 Maya 后依然可用。")
+    print(f"[FBX Inspector] 通用 Maya 插件可信加载桥已安装: {bridge}")
 
 
 def uninstall() -> None:
-    """移除工具架按钮,并从 userSetup.py 删除路径块。"""
+    """移除工具架按钮、启动路径与通用 Maya 插件可信加载桥。"""
     shelf = _current_shelf()
     _remove_existing_button(shelf)
 
@@ -135,7 +212,15 @@ def uninstall() -> None:
             cleaned = (head.rstrip("\n") + "\n" + tail.lstrip("\n")).strip()
             with open(us, "w", encoding="utf-8") as f:
                 f.write(cleaned + ("\n" if cleaned else ""))
-    print("[FBX Inspector] 已卸载工具架按钮与启动路径。")
+    import maya.cmds as cmds  # type: ignore[import-not-found]
+
+    if _plugin_loaded(_PLUGIN_ID):
+        cmds.pluginInfo(_PLUGIN_ID, edit=True, autoload=False)
+    _unload_inspector_plugins()
+    target = _plugin_target()
+    if os.path.exists(target):
+        os.remove(target)
+    print("[FBX Inspector] 已卸载工具架按钮、启动路径与通用 Maya 插件加载桥。")
 
 
 def onMayaDroppedPythonFile(*args) -> None:

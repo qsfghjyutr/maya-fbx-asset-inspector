@@ -168,6 +168,13 @@ def _make_window_class():
             self._curve_combo = QtWidgets.QComboBox()
             self._curve_combo.addItems(list(_CURVES))
             opts.addWidget(self._curve_combo)
+            self._show_values = QtWidgets.QCheckBox("显示数值")
+            opts.addWidget(self._show_values)
+            opts.addWidget(QtWidgets.QLabel("字号"))
+            self._font_size = QtWidgets.QSpinBox()
+            self._font_size.setRange(6, 48)
+            self._font_size.setValue(12)
+            opts.addWidget(self._font_size)
             opts.addStretch(1)
             root.addLayout(opts)
 
@@ -190,6 +197,8 @@ def _make_window_class():
             for w in (self._ramp_combo, self._curve_combo):
                 w.currentIndexChanged.connect(self._reapply)
             self._normalize.stateChanged.connect(self._reapply)
+            self._show_values.stateChanged.connect(self._reapply)
+            self._font_size.valueChanged.connect(self._reapply)
 
             root.addWidget(self._view.widget, stretch=1)
 
@@ -265,7 +274,12 @@ def _make_window_class():
                 curve=self._curve(),
                 normalize=self._normalize.isChecked(),
             )
-            result = self._view.show_channel(rule, self._source_view)
+            result = self._view.show_channel(
+                rule,
+                self._source_view,
+                show_values=self._show_values.isChecked(),
+                font_size=self._font_size.value(),
+            )
             self._update_range_label(result.viz_info)
             report = build_report(self._mesh_name, [result])
             self._report.setPlainText(report.to_text())

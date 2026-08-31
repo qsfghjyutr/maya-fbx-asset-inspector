@@ -27,8 +27,9 @@ Version 0.1. The Maya-free layers (decode / validate / rules / report / registry
 and unit-tested. The core Maya path (mesh reads + color-set visualizer) has been verified in Maya
 2025 via `scripts/maya_smoke_test.py`. The PySide6 inspector window, isolated embedded viewport,
 coordinate-convention preview, and axis indicator are implemented; because `modelPanel` requires a
-Maya GUI, those UI paths require interactive testing. The vector/text DrawOverride visualizer is
-still a roadmap placeholder.
+Maya GUI, those UI paths require interactive testing. Version 2.0 development adds numeric labels
+beside vertices through a Viewport 2.0 DrawOverride, with adjustable font size. Vector-arrow
+visualization is deferred to an unspecified later release.
 
 ### Requirements
 
@@ -41,7 +42,14 @@ still a roadmap placeholder.
 Script… → pick it). This creates an **FBXi** shelf button that opens the inspector, and registers
 the repo on Maya's Python path via `userSetup.py` so it survives restarts — no typed paths, no
 hardcoding (the location is derived from the file itself). The shelf button reloads the latest code
-on each click, so editing source just needs a re-click. Uninstall: `import install; install.uninstall()`.
+on each click, so editing source just needs a re-click. Installation also places one tiny, stable,
+general-purpose `fbx_inspector_plugin.py` bridge in Maya's trusted per-user `plug-ins` directory.
+This bridge contains no inspector implementation: it forwards all Maya plugin registration to the
+current repository code, including future extension modules. It is necessary because
+ordinary Inspector modules are imported through `sys.path`, while `MPxDrawOverride` must be
+registered through `loadPlugin()`, which applies Maya's trusted-location security check. Uninstall:
+`import install; install.uninstall()`. The bridge reads the latest repository implementation on
+each Maya startup; Viewport plugin changes therefore require a Maya restart, not reinstallation.
 
 For off-DCC development: `pip install -e ".[dev]"`.
 
@@ -79,7 +87,9 @@ from fbx_inspector.ui import open_inspector
 open_inspector()          # or open_inspector("meshName")
 ```
 
-Click R/G/B/A to view color-set components, U/V for UV sets; adjust ramp / normalize / curve. The
+Click R/G/B/A to view color-set components, U/V for UV sets; adjust ramp / normalize / curve. Enable
+numeric values to label the corresponding vertices and adjust their font size. Repeated
+face-vertex values are collapsed per vertex; distinct seam values are shown on separate lines. The
 window shows a temporary offset duplicate in its embedded panel and removes it when closed.
 
 ### Your own rules (never overwritten by updates)
@@ -93,8 +103,8 @@ Copy `user_rules/_template.py` to get started.
 
 - **Decoder** — turns raw channel components into typed data (scalar / vec2/3/4 / mask / enum),
   including unpacking (e.g. two 8-bit values in one float).
-- **Visualizer** — renders decoded data. Scalars remap into a display color set (native
-  viewport); vectors/text use a Viewport 2.0 draw override (roadmap).
+- **Visualizer** — renders decoded data. Scalars remap into a display color set (native viewport);
+  numeric vertex labels use a Viewport 2.0 DrawOverride. Vector arrows are deferred.
 - **Validator** — checks decoded data (range, NaN/Inf, normalized, constant) and reports
   issues located at exact face-vertices.
 - **Rule / Profile** — a Rule binds channels to a decoder and pairs it with a visualizer +
@@ -159,8 +169,8 @@ fork。
 当前版本为 v0.1。与 Maya 无关的各层(解码 / 校验 / 规则 / 报告 / 注册表)已实现并有单元测试。
 核心 Maya 链路(网格读取 + color set 可视化)已通过 `scripts/maya_smoke_test.py` 在 Maya 2025
 内验证。PySide6 检查窗口、内嵌隔离视口、坐标约定预览和方向指示器均已实现;由于
-`modelPanel` 依赖 Maya GUI,这些 UI 链路仍需交互式测试。向量/文字 DrawOverride 可视化器仍是
-路线图占位实现。
+`modelPanel` 依赖 Maya GUI,这些 UI 链路仍需交互式测试。2.0 开始加入基于 Viewport 2.0
+DrawOverride 的顶点旁数值标签,并支持调整字号。向量箭头可视化已推迟到未指定的后续版本。
 
 ### 环境要求
 
@@ -172,7 +182,13 @@ fork。
 **把 `install.py` 从资源管理器拖进 Maya 视口**(或 Maya 菜单 File → Source Script… 选中它)。这会
 创建一个 **FBXi** 工具架按钮用于打开检查器,并通过 `userSetup.py` 把仓库注册到 Maya 的 Python
 路径上,重启后依然可用——无需输入路径、无硬编码(位置由文件自身推导)。按钮每次点击都会重载最新
-代码,所以改完源码再点一下即可。卸载:`import install; install.uninstall()`。
+代码,所以改完源码再点一下即可。安装时还会在 Maya 当前版本的用户 `plug-ins` 目录放置唯一一个很小且
+稳定的通用桥 `fbx_inspector_plugin.py`。它不包含 Inspector 功能实现,只把所有 Maya 插件注册转发到
+仓库中的统一入口;未来新增插件模块也复用这一个桥,无需复制新的加载器。
+之所以必须有这层桥,是因为 Inspector 本体作为普通 Python 包通过 `sys.path` 导入,不经过 Maya 插件
+安全检查;而 `MPxDrawOverride` 必须通过 `loadPlugin()` 注册,Maya 会对入口文件执行可信位置检查。
+加载桥会在每次 Maya 启动时读取仓库最新版,所以 Viewport 插件代码更新后只需重启 Maya,无需重新安装。
+卸载:`import install; install.uninstall()`。
 
 脱离 DCC 开发时:`pip install -e ".[dev]"`。
 
@@ -211,7 +227,8 @@ open_inspector()          # 或 open_inspector("网格名")
 ```
 
 点 R/G/B/A 看 color set 分量,U/V 看 UV set;可调色带 / 归一化 / 曲线。窗口在其内嵌面板里显示一份
-偏移到远处的临时副本,关闭时自动移除。
+偏移到远处的临时副本,关闭时自动移除。开启“显示数值”后,所选通道的数值会标在对应顶点旁,
+字号可调;同一顶点的重复值会合并,缝两侧的不同值则分行显示。
 
 ### 你自己的规则(系统更新不覆盖)
 
@@ -224,7 +241,7 @@ open_inspector()          # 或 open_inspector("网格名")
 - **Decoder(解码器)**—— 把原始通道分量解释为有类型的数据(标量 / vec2/3/4 / mask / enum),
   含解包(如一个 float 里的两个 8-bit 值)。
 - **Visualizer(可视化器)**—— 渲染解码后的数据。标量重映射进显示 color set(原生视口);
-  向量/文字走 Viewport 2.0 draw override(路线图)。
+  顶点数值标签走 Viewport 2.0 DrawOverride。向量箭头已推迟。
 - **Validator(校验器)**—— 校验解码数据(范围、NaN/Inf、归一化、常量),并把问题精确定位到
   面顶点。
 - **Rule / Profile(规则 / 配置档)**—— Rule 把通道绑定到解码器,再配可视化器 + 校验器;

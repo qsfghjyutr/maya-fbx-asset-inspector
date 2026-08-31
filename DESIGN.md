@@ -48,7 +48,8 @@ fbx_inspector/
   validate/   # DecodedData → [Issue]                              与 Maya 无关
   visualize/  # DecodedData → 视口表现
     colorset.py   标量 → 显示 color set(原生视口)   仅 Maya,惰性
-    viewport.py   向量/文字 → VP2 DrawOverride(路线图占位)  仅 Maya,惰性
+    viewport.py   顶点数值文字 → VP2 DrawOverride                    仅 Maya,惰性
+    viewport_plugin.py  数值标签 locator + MPxDrawOverride          仅 Maya
   rules/      # Rule / Profile:把通道绑定到角色,打包 解码+可视化+校验   与 Maya 无关
   report.py   # RuleResult / Report,文本 + json                    与 Maya 无关
   api.py      # 高层编排入口
@@ -63,7 +64,7 @@ fbx_inspector/
   (`SCALAR / VEC2 / VEC3 / VEC4 / MASK / ENUM`)。**解包**逻辑就住在这里(把一个 float 拆成两个
   8-bit 值、读取位域、重建法线的 z 分量等等)。
 - **Visualizer(可视化器)**—— 声明自己 `accepts` 哪些 `DataKind`,把 `DecodedData` 转成视口表现,
-  并能 `clear()` 掉自己添加的内容。标量 → color set 重映射;向量/文字 → DrawOverride。
+  并能 `clear()` 掉自己添加的内容。标量 → color set 重映射;顶点数值文字 → DrawOverride。
 - **Validator(校验器)**—— 把 `DecodedData` 转成一组 `Issue`(严重级别 + 消息 + 组件 id + 值)。
   内置:范围、NaN/Inf、vec3 归一化、常量/退化检查。
 
@@ -89,8 +90,9 @@ Rule(
 
 - **标量 / 颜色** → 重映射进一个临时**显示 color set**,让 Maya 原生的"显示顶点色"来渲染。简单、
   稳健、无需自定义绘制代码。这是 v1 的主力。
-- **向量 / 方向 / 文字** → 用 Viewport 2.0 的 **`MPxDrawOverride`**,通过 `MUIDrawManager` 绘制箭头 /
-  标签。表现力更强(流场、切线基),但复杂度更高;v1 该模块为带注释的占位实现。
+- **数值文字** → 用 Viewport 2.0 的 **`MPxDrawOverride`**,通过 `MUIDrawManager` 在对应几何顶点旁
+  绘制所选通道的数值,并支持调整字号。相同面顶点值按顶点去重,缝两侧的不同值分行显示。
+- **向量 / 方向** → 箭头可视化不属于 2.0,已推迟到未指定的后续版本。
 
 ## 曲线重映射(Ramp,chramp 式)
 
@@ -130,6 +132,23 @@ Rule(
 约束:`modelPanel` 需要 GUI,无法用 mayapy 无头测;窗口只能在 Maya GUI 内手测。但"读原物体 → 着色副本
 → 原物体不受影响"这段数据链路可无头验证(见 `scripts/maya_smoke_test.py`)。
 
+### 通用 Maya 插件可信加载桥
+
+Inspector 本体是普通 Python 包:`install.py` 只需把仓库加入 `sys.path`,Shelf 点击时清除模块缓存,
+便能直接读取仓库中的最新实现。数值标签不同:它使用 `MPxLocatorNode`、`MPxDrawOverride` 和
+`MDrawRegistry`,必须经过 Maya 的 `cmds.loadPlugin()` / `MFnPlugin` 注册。Maya 会对所有
+`loadPlugin()` 入口执行可信位置检查,直接加载仓库中的 `viewport_plugin.py` 会在新会话中触发
+“不受信任位置”警告。
+
+因此安装器只把根目录的通用桥 `fbx_inspector_plugin.py` 复制到 Maya 当前版本的用户 `plug-ins` 目录。
+这个可信加载桥不包含功能代码,仅把 `initializePlugin` / `uninitializePlugin` 转发给仓库内的统一聚合
+入口 `fbx_inspector.maya_plugin`。Viewport 以及未来新增的其他 Maya 插件模块都在聚合入口中登记,
+始终复用同一个可信桥,不为每个模块复制单独的加载器。
+Maya 每次启动并自动加载桥时都会读取仓库当时的最新版,因此更新功能代码后只需正常重启 Maya,无需
+重新安装。Inspector 的普通 Python 模块仍会在每次点击 Shelf 时热重载。DrawOverride 已注册的 Python
+类不在运行中强制卸载,因为 Maya 会警告这可能破坏稳定性与撤销队列。只有加载桥协议或仓库位置本身变化
+时,才需要再次拖入 `install.py`。
+
 ### 坐标约定(Maya / 引擎)
 
 隔离视口默认按 **Maya**(Y-up、右手)显示,可切换到目标引擎的坐标约定(v1 内置 **UE**:Z-up、左手),
@@ -149,9 +168,11 @@ Rule(
 
 1. **v1(已落地)** —— 扎实的逐面顶点读取、color set 重映射可视化器、内置解码器/校验器、
    独立 GUI 检查窗口(嵌入隔离面板)、文本/json 报告。
-2. DrawOverride 的向量/文字可视化器(法线/流向箭头)。
+2. **2.0(进行中)** —— DrawOverride 顶点数值标签与可调字号。
 3. 面向 CI 的批处理 / 无头校验,由 Profile 驱动。
 4. 可选的 FBX SDK 直连解析,用于交叉校验 Maya 导入的保真度。
+
+向量箭头(法线 / 流向)已从 2.0 移出,暂不绑定到 3.0 或其他具体版本。
 
 ## 测试
 

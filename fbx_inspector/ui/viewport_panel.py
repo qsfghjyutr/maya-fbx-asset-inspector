@@ -80,7 +80,9 @@ class IsolatedMeshView:
         cmds.modelPanel(self.panel, edit=True, camera=self.camera)
         editor = cmds.modelPanel(self.panel, query=True, modelEditor=True)
         # 视口显示精简:关网格线、只显示多边形
-        cmds.modelEditor(editor, edit=True, grid=False, displayAppearance="smoothShaded")
+        cmds.modelEditor(
+            editor, edit=True, grid=False, locators=True, displayAppearance="smoothShaded"
+        )
 
         ptr = _omui().MQtUtil.findControl(self.panel)
         self.widget = _wrap_instance()(int(ptr), _qwidget_cls())
@@ -150,7 +152,9 @@ class IsolatedMeshView:
         """设置是否随坐标约定同步转换 UV 空间(V→1-V)。只存标志;重着色由窗口驱动(见 window)。"""
         self._convert_uv = bool(enabled)
 
-    def show_channel(self, rule, source_view) -> object:
+    def show_channel(
+        self, rule, source_view, *, show_values: bool = False, font_size: int = 12
+    ) -> object:
         """按规则读取源网格通道 → 解码 → 给副本着色 → 刷新;返回 RuleResult(含校验)。
 
         ``rule`` 来自 ``ui.channels.scalar_rule_for``;``source_view`` 是源网格的
@@ -172,6 +176,13 @@ class IsolatedMeshView:
         dup_view = MeshData(self.dup)
         ctx = InspectionContext(mesh_name=self.dup)
         info = rule.visualizer.apply(dup_view, decoded, ctx)  # 写副本的显示 color set
+        from ..visualize.viewport import ViewportTextVisualizer
+
+        labels = ViewportTextVisualizer(font_size=font_size, parent=self.dup)
+        if show_values:
+            labels.apply(dup_view, decoded, ctx)
+        else:
+            labels.clear(dup_view, ctx)
         cmds.refresh()
 
         result = RuleResult(

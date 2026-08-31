@@ -55,6 +55,12 @@ class MeshData:
         chans += [Channel(SourceType.UV_SET, n) for n in self.uv_set_names()]
         return chans
 
+    def vertex_positions(self) -> list[tuple[float, float, float]]:
+        """返回网格对象空间的逐顶点位置，供视口标注等只读可视化使用。"""
+        om = _om()
+        points = om.MFnMesh(self._dag).getPoints(om.MSpace.kObject)
+        return [(float(p.x), float(p.y), float(p.z)) for p in points]
+
     def read_channel(self, channel: Channel) -> ChannelData:
         """按面顶点顺序读取一个通道的原始分量。
 
