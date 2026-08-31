@@ -35,10 +35,10 @@ _COMPONENTS = {
 
 def _qt():
     try:
-        from PySide6 import QtCore, QtWidgets  # type: ignore[import-not-found]
+        from PySide6 import QtCore, QtGui, QtWidgets  # type: ignore[import-not-found]
     except ImportError:  # pragma: no cover - 旧版 Maya
-        from PySide2 import QtCore, QtWidgets  # type: ignore[import-not-found]
-    return QtCore, QtWidgets
+        from PySide2 import QtCore, QtGui, QtWidgets  # type: ignore[import-not-found]
+    return QtCore, QtGui, QtWidgets
 
 
 def _wrap_instance():
@@ -52,7 +52,7 @@ def _wrap_instance():
 def _maya_main_window():
     import maya.OpenMayaUI as omui  # type: ignore[import-not-found]
 
-    _, QtWidgets = _qt()
+    _, _, QtWidgets = _qt()
     ptr = omui.MQtUtil.mainWindow()
     return _wrap_instance()(int(ptr), QtWidgets.QWidget) if ptr else None
 
@@ -66,7 +66,7 @@ def _purge_leftovers() -> None:
 
     from .viewport_panel import CAM_NAME, GROUP_NAME
 
-    _, QtWidgets = _qt()
+    _, _, QtWidgets = _qt()
 
     # 0) 旧版可停靠实现残留的 workspaceControl(Maya 会跨会话保存,需主动清掉)
     legacy_ws = _OBJECT_NAME + "WorkspaceControl"
@@ -108,12 +108,13 @@ def _purge_leftovers() -> None:
 
 
 def _make_window_class():
-    QtCore, QtWidgets = _qt()
+    QtCore, QtGui, QtWidgets = _qt()
 
     from ..core.mesh_data import MeshData
     from ..report import build_report
     from ..core.coord_convention import CONVENTIONS
     from ..visualize.base import RAMPS
+    from ..visualize.viewport import DEFAULT_LABEL_COLOR
     from .axis_indicator import make_axis_indicator
     from .channels import scalar_rule_for
     from .viewport_panel import IsolatedMeshView
@@ -170,6 +171,13 @@ def _make_window_class():
             opts.addWidget(self._curve_combo)
             self._show_values = QtWidgets.QCheckBox("显示数值")
             opts.addWidget(self._show_values)
+            opts.addWidget(QtWidgets.QLabel("颜色"))
+            self._value_color = QtGui.QColor.fromRgbF(*DEFAULT_LABEL_COLOR)
+            self._color_button = QtWidgets.QPushButton()
+            self._color_button.setFixedSize(28, 22)
+            self._color_button.setToolTip("选择数值标签颜色")
+            self._update_color_button()
+            opts.addWidget(self._color_button)
             opts.addWidget(QtWidgets.QLabel("字号"))
             self._font_size = QtWidgets.QSpinBox()
             self._font_size.setRange(6, 48)
@@ -198,6 +206,7 @@ def _make_window_class():
                 w.currentIndexChanged.connect(self._reapply)
             self._normalize.stateChanged.connect(self._reapply)
             self._show_values.stateChanged.connect(self._reapply)
+            self._color_button.clicked.connect(self._choose_value_color)
             self._font_size.valueChanged.connect(self._reapply)
 
             root.addWidget(self._view.widget, stretch=1)
@@ -252,6 +261,21 @@ def _make_window_class():
             if self._current is not None:
                 self._apply()
 
+        def _choose_value_color(self) -> None:
+            color = QtWidgets.QColorDialog.getColor(
+                self._value_color, self, "选择数值标签颜色"
+            )
+            if color.isValid():
+                self._value_color = color
+                self._update_color_button()
+                self._reapply()
+
+        def _update_color_button(self) -> None:
+            self._color_button.setStyleSheet(
+                "QPushButton { background-color: %s; border: 1px solid #777; }"
+                % self._value_color.name()
+            )
+
         def _apply_coord(self, *args) -> None:
             # 副本姿态与 UV 空间都随坐标约定变化:UV 的 V 现按 UE 的 V→1-V 同步转换,故约定切换后
             # 若当前正显示 UV 通道,需重跑 _apply 让预览/校验跟上;非 UV 通道的颜色仍与世界变换无关。
@@ -279,6 +303,7 @@ def _make_window_class():
                 self._source_view,
                 show_values=self._show_values.isChecked(),
                 font_size=self._font_size.value(),
+                value_color=self._value_color.getRgbF(),
             )
             self._update_range_label(result.viz_info)
             report = build_report(self._mesh_name, [result])

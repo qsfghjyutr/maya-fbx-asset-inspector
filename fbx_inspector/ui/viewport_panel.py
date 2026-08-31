@@ -153,7 +153,8 @@ class IsolatedMeshView:
         self._convert_uv = bool(enabled)
 
     def show_channel(
-        self, rule, source_view, *, show_values: bool = False, font_size: int = 12
+        self, rule, source_view, *, show_values: bool = False, font_size: int = 12,
+        value_color: tuple[float, float, float, float] | None = None,
     ) -> object:
         """按规则读取源网格通道 → 解码 → 给副本着色 → 刷新;返回 RuleResult(含校验)。
 
@@ -178,7 +179,10 @@ class IsolatedMeshView:
         info = rule.visualizer.apply(dup_view, decoded, ctx)  # 写副本的显示 color set
         from ..visualize.viewport import ViewportTextVisualizer
 
-        labels = ViewportTextVisualizer(font_size=font_size, parent=self.dup)
+        options = {"font_size": font_size, "parent": self.dup}
+        if value_color is not None:
+            options["color"] = value_color
+        labels = ViewportTextVisualizer(**options)
         if show_values:
             labels.apply(dup_view, decoded, ctx)
         else:

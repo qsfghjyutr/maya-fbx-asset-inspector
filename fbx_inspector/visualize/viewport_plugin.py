@@ -12,6 +12,7 @@ NODE_TYPE = "fbxInspectorValueLabels"
 NODE_ID = om.MTypeId(0x0013B2A1)
 DRAW_CLASSIFICATION = "drawdb/geometry/fbxInspectorValueLabels"
 DRAW_REGISTRANT = "FbxInspectorValueLabelsRegistrant"
+DEFAULT_LABEL_COLOR = (230 / 255, 81 / 255, 0.0, 1.0)
 
 
 def maya_useNewAPI():
@@ -51,6 +52,7 @@ class LabelDrawData(om.MUserData):
         super().__init__(False)
         self.labels = []
         self.font_size = 12
+        self.color = DEFAULT_LABEL_COLOR
 
 
 class ValueLabelDrawOverride(omr.MPxDrawOverride):
@@ -72,9 +74,17 @@ class ValueLabelDrawOverride(omr.MPxDrawOverride):
         node = om.MFnDependencyNode(obj_path.node())
         raw = node.findPlug("labelsJson", False).asString()
         try:
-            data.labels = json.loads(raw) if raw else []
+            payload = json.loads(raw) if raw else []
+            if isinstance(payload, dict):
+                data.labels = payload.get("labels", [])
+                color = payload.get("color", DEFAULT_LABEL_COLOR)
+                data.color = tuple(float(c) for c in color[:4])
+            else:
+                data.labels = payload
+                data.color = DEFAULT_LABEL_COLOR
         except (TypeError, ValueError):
             data.labels = []
+            data.color = DEFAULT_LABEL_COLOR
         data.font_size = node.findPlug("fontSize", False).asInt()
         return data
 
@@ -82,7 +92,7 @@ class ValueLabelDrawOverride(omr.MPxDrawOverride):
         if not isinstance(data, LabelDrawData):
             return
         draw_manager.beginDrawable()
-        draw_manager.setColor(om.MColor((1.0, 1.0, 0.25, 1.0)))
+        draw_manager.setColor(om.MColor(data.color))
         draw_manager.setFontSize(data.font_size)
         for item in data.labels:
             point = item.get("p", (0.0, 0.0, 0.0))

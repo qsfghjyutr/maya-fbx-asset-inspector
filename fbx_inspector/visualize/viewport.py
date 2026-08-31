@@ -15,6 +15,7 @@ from .base import Visualizer
 NODE_TYPE = "fbxInspectorValueLabels"
 NODE_NAME = "__fbx_inspector_value_labels__"
 TRUSTED_PLUGIN = "fbx_inspector_plugin"
+DEFAULT_LABEL_COLOR = (230 / 255, 81 / 255, 0.0, 1.0)
 
 
 def format_value(value: tuple[float, ...], precision: int = 3) -> str:
@@ -41,9 +42,13 @@ class ViewportTextVisualizer(Visualizer):
     accepts = frozenset(DataKind)
 
     def __init__(self, *, font_size: int = 12, precision: int = 3,
+                 color: tuple[float, float, float, float] = DEFAULT_LABEL_COLOR,
                  parent: str | None = None, node_name: str = NODE_NAME) -> None:
         self.font_size = max(1, int(font_size))
         self.precision = max(0, int(precision))
+        if len(color) != 4:
+            raise ValueError("数值标签颜色必须是 RGBA 四元组")
+        self.color = tuple(max(0.0, min(1.0, float(c))) for c in color)
         self.parent = parent
         self.node_name = node_name
 
@@ -78,6 +83,7 @@ class ViewportTextVisualizer(Visualizer):
         transform = cmds.rename(transform, self.node_name)
         if self.parent:
             cmds.parent(transform, self.parent, relative=True)
+        payload = {"labels": payload, "color": self.color}
         cmds.setAttr(f"{shape}.labelsJson", json.dumps(payload), type="string")
         cmds.setAttr(f"{shape}.fontSize", self.font_size)
         return None
@@ -90,4 +96,4 @@ class ViewportTextVisualizer(Visualizer):
                 cmds.delete(node)
 
 
-__all__ = ["ViewportTextVisualizer", "build_vertex_labels", "format_value"]
+__all__ = ["DEFAULT_LABEL_COLOR", "ViewportTextVisualizer", "build_vertex_labels", "format_value"]
