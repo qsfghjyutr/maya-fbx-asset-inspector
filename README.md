@@ -23,10 +23,12 @@ asset convention — no forking required.
 
 ### Status
 
-Early scaffold (v0.1). The Maya-free layers (decode / validate / rules / report / registry) are
-implemented and unit-tested. The core Maya path (mesh reads + color-set visualizer) has been
-verified in Maya 2025 via `scripts/maya_smoke_test.py`. Still stubbed: the vector/text DrawOverride
-visualizer and the PySide6 window.
+Version 0.1. The Maya-free layers (decode / validate / rules / report / registry) are implemented
+and unit-tested. The core Maya path (mesh reads + color-set visualizer) has been verified in Maya
+2025 via `scripts/maya_smoke_test.py`. The PySide6 inspector window, isolated embedded viewport,
+coordinate-convention preview, and axis indicator are implemented; because `modelPanel` requires a
+Maya GUI, those UI paths require interactive testing. The vector/text DrawOverride visualizer is
+still a roadmap placeholder.
 
 ### Requirements
 
@@ -69,7 +71,7 @@ rule = channel_view_rule("colorSet1", "R", curve=Ramp.quadratic())
 
 ### Inspector window (dedicated GUI)
 
-Open a separate dockable window that visualizes each channel in its **own isolated viewport** — the
+Open a separate floating window that visualizes each channel in its **own isolated viewport** — the
 main Maya viewport and scene stay unchanged. Select a mesh, then:
 
 ```python
@@ -154,9 +156,11 @@ fork。
 
 ### 现状
 
-早期骨架(v0.1)。与 Maya 无关的各层(解码 / 校验 / 规则 / 报告 / 注册表)已实现并有单元测试。
+当前版本为 v0.1。与 Maya 无关的各层(解码 / 校验 / 规则 / 报告 / 注册表)已实现并有单元测试。
 核心 Maya 链路(网格读取 + color set 可视化)已通过 `scripts/maya_smoke_test.py` 在 Maya 2025
-内验证。仍为占位:向量/文字 DrawOverride 可视化器与 PySide6 窗口。
+内验证。PySide6 检查窗口、内嵌隔离视口、坐标约定预览和方向指示器均已实现;由于
+`modelPanel` 依赖 Maya GUI,这些 UI 链路仍需交互式测试。向量/文字 DrawOverride 可视化器仍是
+路线图占位实现。
 
 ### 环境要求
 
@@ -198,7 +202,7 @@ rule = channel_view_rule("colorSet1", "R", curve=Ramp.quadratic())
 
 ### 检查窗口(独立 GUI)
 
-打开一个独立的可停靠窗口,每个通道在它**自己的隔离视口**里显示——主 Maya 视口和场景保持不变。
+打开一个独立的浮动窗口,每个通道在它**自己的隔离视口**里显示——主 Maya 视口和场景保持不变。
 选中网格后:
 
 ```python

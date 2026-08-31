@@ -52,7 +52,7 @@ fbx_inspector/
   rules/      # Rule / Profile:把通道绑定到角色,打包 解码+可视化+校验   与 Maya 无关
   report.py   # RuleResult / Report,文本 + json                    与 Maya 无关
   api.py      # 高层编排入口
-  ui/         # PySide6 可停靠窗口(占位)                            仅 Maya,惰性
+  ui/         # PySide6 浮动窗口 + 内嵌隔离视口                     仅 Maya,惰性
 ```
 
 ### 插件契约
@@ -113,7 +113,7 @@ Rule(
 
 ## 独立 GUI 检查窗口(嵌入隔离面板)
 
-`ui/window.py` 的 `InspectorWindow`(PySide6 可停靠窗口)提供一个**独立**的检查界面:像 UV 编辑器
+`ui/window.py` 的 `InspectorWindow`(PySide6 浮动窗口)提供一个**独立**的检查界面:像 UV 编辑器
 那样点 R/G/B/A 看 color set 分量、点 U/V 看 UV set 分量,可调色带 / 归一化 / `Ramp` 曲线,可切换
 **坐标约定**(见下),底部显示校验报告。归一化开关旁实时显示当前通道的 min/max,让用户知道颜色是
 按哪个区间归一化出来的(同一区间也写进文本/json 报告)。
