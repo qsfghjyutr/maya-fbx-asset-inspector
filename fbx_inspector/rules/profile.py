@@ -72,6 +72,14 @@ class Profile:
     rules: list[Rule] = field(default_factory=list)
     #: 资产名匹配正则;None 表示适用于任何资产。
     match_pattern: str | None = None
+    #: UI 中显示的预设名称;None 时回退到 id。
+    name: str | None = None
+    #: 给使用者看的简短说明。
+    description: str = ""
+
+    @property
+    def display_name(self) -> str:
+        return self.name or self.id
 
     def matches(self, asset_name: str) -> bool:
         if self.match_pattern is None:

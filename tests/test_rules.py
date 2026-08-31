@@ -106,6 +106,11 @@ def test_profile_matches_and_report_serializes():
     assert "prop_barrel" in report.to_json()
 
 
+def test_profile_display_name_falls_back_to_id():
+    assert Profile(id="plain").display_name == "plain"
+    assert Profile(id="named", name="工作室预设").display_name == "工作室预设"
+
+
 def test_value_range_maya_free():
     data = DecodedData(
         kind=DataKind.SCALAR,

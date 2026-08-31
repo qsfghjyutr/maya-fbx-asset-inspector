@@ -111,6 +111,7 @@ def _make_window_class():
     QtCore, QtGui, QtWidgets = _qt()
 
     from ..core.mesh_data import MeshData
+    from ..core.registry import PROFILES
     from ..report import build_report
     from ..core.coord_convention import CONVENTIONS
     from ..visualize.base import RAMPS
@@ -142,6 +143,21 @@ def _make_window_class():
             central = QtWidgets.QWidget()
             self.setCentralWidget(central)
             root = QtWidgets.QVBoxLayout(central)
+
+            preset_row = QtWidgets.QHBoxLayout()
+            preset_row.addWidget(QtWidgets.QLabel("检查预设"))
+            self._preset_combo = QtWidgets.QComboBox()
+            preset_row.addWidget(self._preset_combo, stretch=1)
+            self._run_preset_button = QtWidgets.QPushButton("一键执行全部规则")
+            preset_row.addWidget(self._run_preset_button)
+            root.addLayout(preset_row)
+            self._preset_description = QtWidgets.QLabel()
+            self._preset_description.setWordWrap(True)
+            root.addWidget(self._preset_description)
+            self._populate_presets(PROFILES)
+            self._preset_combo.currentIndexChanged.connect(self._update_preset_description)
+            self._run_preset_button.clicked.connect(self._run_preset)
+            self._update_preset_description()
 
             self._cs_combo = QtWidgets.QComboBox()
             self._uv_combo = QtWidgets.QComboBox()
@@ -240,6 +256,23 @@ def _make_window_class():
             self._cs_combo.addItems(self._source_view.color_set_names())
             self._uv_combo.addItems(self._source_view.uv_set_names())
 
+        def _populate_presets(self, registry) -> None:
+            profiles = registry.all()
+            ordered = sorted(
+                profiles.values(),
+                key=lambda profile: (profile.id != "default", profile.display_name),
+            )
+            for profile in ordered:
+                self._preset_combo.addItem(profile.display_name, userData=profile.id)
+
+        def _selected_profile(self):
+            profile_id = self._preset_combo.currentData()
+            return PROFILES.get(profile_id) if profile_id else None
+
+        def _update_preset_description(self, *args) -> None:
+            profile = self._selected_profile()
+            self._preset_description.setText(profile.description if profile else "")
+
         # —— 交互 ——
         def _combo_for(self, source):
             return self._cs_combo if source is SourceType.COLOR_SET else self._uv_combo
@@ -260,6 +293,46 @@ def _make_window_class():
         def _reapply(self, *args) -> None:
             if self._current is not None:
                 self._apply()
+
+        def _run_preset(self, *args) -> None:
+            profile = self._selected_profile()
+            if profile is None:
+                self._report.setPlainText("没有可执行的检查预设。")
+                return
+            if not profile.matches(self._mesh_name):
+                self._report.setPlainText(
+                    f"预设“{profile.display_name}”不适用于资产 {self._mesh_name}。"
+                )
+                return
+
+            results = []
+            failures = []
+            for rule in profile.rules:
+                try:
+                    results.append(
+                        self._view.show_channel(
+                            rule,
+                            self._source_view,
+                            show_values=self._show_values.isChecked(),
+                            font_size=self._font_size.value(),
+                            value_color=self._value_color.getRgbF(),
+                        )
+                    )
+                except Exception as exc:  # 单条规则失败不阻断同一预设中的其余规则
+                    failures.append(f"[规则 {rule.id}] 执行失败：{exc}")
+
+            # 预设中的每个可视化器都会把自己的 color set 设为 current，最后一条规则
+            # 因而会暂时占据视口。恢复执行前手动选中的通道，但不要用它覆盖预设汇总报告。
+            if self._current is not None:
+                try:
+                    self._apply(update_report=False)
+                except Exception as exc:
+                    failures.append(f"[恢复当前通道] 刷新失败：{exc}")
+
+            text = build_report(self._mesh_name, results).to_text() if results else ""
+            if failures:
+                text = "\n".join(filter(None, [text, *failures]))
+            self._report.setPlainText(text or "该预设没有规则。")
 
         def _choose_value_color(self) -> None:
             color = QtWidgets.QColorDialog.getColor(
@@ -288,7 +361,7 @@ def _make_window_class():
             if self._current is not None and self._current[0] is SourceType.UV_SET:
                 self._apply()
 
-        def _apply(self) -> None:
+        def _apply(self, *, update_report: bool = True) -> None:
             source, set_name, component = self._current
             rule = scalar_rule_for(
                 source,
@@ -306,8 +379,9 @@ def _make_window_class():
                 value_color=self._value_color.getRgbF(),
             )
             self._update_range_label(result.viz_info)
-            report = build_report(self._mesh_name, [result])
-            self._report.setPlainText(report.to_text())
+            if update_report:
+                report = build_report(self._mesh_name, [result])
+                self._report.setPlainText(report.to_text())
 
         def _update_range_label(self, info) -> None:
             """把当前通道的 min/max 写到"归一化"旁的标签上。"""
@@ -332,6 +406,12 @@ def _make_window_class():
 def open_inspector(mesh_name: str = ""):
     """在 Maya 内打开检查窗口。未传网格名时取当前选中的网格。"""
     import maya.cmds as cmds  # type: ignore[import-not-found]
+
+    # 内置默认预设 + 用户目录中的额外预设。示例 Profile 不进入正式预设列表。
+    from .. import plugins
+    from ..presets import default_profile  # noqa: F401
+
+    plugins.discover(include_examples=False)
 
     if not mesh_name:
         sel = cmds.ls(selection=True, long=True)
