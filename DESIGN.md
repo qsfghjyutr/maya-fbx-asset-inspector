@@ -130,6 +130,13 @@ Profile 放进预设下拉框,一键依次执行全部 Rule 并汇总报告。�
 取来内嵌,再用**每面板 `isolateSelect`** 让该面板只显示副本。着色写在**副本**的显示 color set 上,
 因此**主视口 / 场景观感始终不变**。窗口关闭时清理副本、相机、面板。
 
+`ui/lod.py` 按 `Asset_LOD0` / `Asset-LOD1` 后缀从所选网格的兄弟节点或所选组的后代中发现
+同前缀 LOD;无后缀的单网格视作 LOD0。窗口中的滑动条以实际 LOD 序号标识各档。切换时
+`IsolatedMeshView.set_source` 只替换 content 下的网格副本,不重新 `viewFit`,因此保留专属相机的
+tumble、pan、zoom。新副本以源网格世界矩阵作为局部基准矩阵,直接继承 content 上已有的坐标约定
+变换和镜像补偿,避免 Maya 的“保持世界变换”抵消坐标系。窗口同时保留可视化控件状态与同名
+Color/UV Set 选择,再对新 LOD 重跑当前规则;只有目标 LOD 缺少当前通道时才回退。
+
 这是"只读消费端"的又一形态:复用 `MeshData` → `ScalarFromComponent` → `ColorSetRemapVisualizer`
 (`ui/channels.py::scalar_rule_for` 把三者按通道装配成 `Rule`),只是把着色目标从场景原物体换成了副本。
 场景内可视化器(直接写原物体)作为"想在原生视口看"的另一选项保留。

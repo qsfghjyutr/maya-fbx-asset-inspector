@@ -92,6 +92,14 @@ deduplicated; distinct values belonging to the same or coincident vertices use a
 separator such as `1 | 0.01`, avoiding ambiguous overdraw. The window shows a temporary offset
 duplicate in its embedded panel and removes it when closed.
 
+LOD assets can be opened by selecting either one LOD mesh or their parent group. Name the mesh
+transforms with a shared prefix and an `_LOD<number>` or `-LOD<number>` suffix, for example
+`Tree_LOD0`, `Tree_LOD1`, and `Tree_LOD2`. The inspector discovers the set and exposes a
+LOD slider; a single mesh without such a suffix is treated as LOD0. Moving the slider replaces
+only the isolated preview duplicate and refreshes the current channel data. Camera tumble, pan,
+zoom, coordinate convention, visualization options, and same-named Color/UV Set selections are
+preserved. A channel selection falls back only when that channel is absent from the target LOD.
+
 The **Inspection preset** selector runs every Rule in a Profile with one click and combines their
 results into one report. The built-in **Default** preset checks `colorSet1` R/G/B/A against [0, 1]
 and creates four grayscale display color sets. After batch execution, the channel that was being
@@ -157,6 +165,7 @@ maya-fbx-asset-inspector/
 │     ├─ __init__.py                 Lazy open_inspector export
 │     ├─ axis_indicator.py           Camera-following Maya/UE handedness indicator
 │     ├─ channels.py                 Manual channel-selection Rule factory
+│     ├─ lod.py                      LOD name parsing and Maya DAG discovery
 │     ├─ viewport_panel.py           Isolated duplicate, camera, and embedded modelPanel
 │     └─ window.py                   Floating window, preset runner, controls, and report pane
 ├─ user_rules/                       User-owned preset and rule area
@@ -174,6 +183,7 @@ maya-fbx-asset-inspector/
 │  ├─ test_coord_convention.py       Coordinate and UV conversion tests
 │  ├─ test_decode.py                 Built-in decoder tests
 │  ├─ test_examples.py               Shipped example Profile tests
+│  ├─ test_lod.py                    LOD naming parser tests
 │  ├─ test_plugins.py                User rule discovery/loading tests
 │  ├─ test_presets.py                Default preset registration tests
 │  ├─ test_remap.py                  Ramp curve tests
@@ -324,6 +334,12 @@ open_inspector()          # 或 open_inspector("网格名")
 字号可调;重复值会去重,同一顶点或空间重合顶点的不同值用 `1 | 0.01` 这样的明确分隔符合并,
 避免文字重叠成 `10.01`。
 
+LOD 资产既可以选中其中一个 LOD 网格打开,也可以选中包含全部 LOD 的父组。网格 transform 需使用
+相同前缀及 `_LOD<序号>` 或 `-LOD<序号>` 后缀,例如 `Tree_LOD0`、`Tree_LOD1`、
+`Tree_LOD2`。检查器会自动发现整组并显示 LOD 滑动条;没有此后缀的单个网格按 LOD0 处理。
+拖动滑动条只替换隔离预览副本并刷新当前通道数据,相机旋转/平移/缩放、坐标系、可视化选项及
+同名 Color/UV Set 选择均保持不变。只有目标 LOD 缺少当前通道时才会回退到可用通道。
+
 “检查预设”下拉框可以一键执行一个 Profile 中的全部 Rule,并把结果合并成一份报告。内置
 “默认”预设检查 `colorSet1` 的 R/G/B/A 是否位于 [0,1],同时生成四套灰度显示 color set。
 批量执行结束后会自动刷新并恢复执行前手动查看的通道,不会停留在最后一条预设规则上。
@@ -384,6 +400,7 @@ maya-fbx-asset-inspector/
 │     ├─ __init__.py                 惰性导出 open_inspector
 │     ├─ axis_indicator.py           随相机转动的 Maya/UE 手性指示器
 │     ├─ channels.py                 手动选择通道的 Rule 工厂
+│     ├─ lod.py                      LOD 名称解析与 Maya DAG 发现
 │     ├─ viewport_panel.py           隔离副本、相机与内嵌 modelPanel
 │     └─ window.py                   浮动窗口、预设执行、控件与报告区
 ├─ user_rules/                       用户拥有的预设与规则目录
@@ -401,6 +418,7 @@ maya-fbx-asset-inspector/
 │  ├─ test_coord_convention.py       坐标及 UV 转换测试
 │  ├─ test_decode.py                 内置 Decoder 测试
 │  ├─ test_examples.py               随附示例 Profile 测试
+│  ├─ test_lod.py                    LOD 命名解析测试
 │  ├─ test_plugins.py                用户规则发现与加载测试
 │  ├─ test_presets.py                默认预设注册测试
 │  ├─ test_remap.py                  Ramp 曲线测试

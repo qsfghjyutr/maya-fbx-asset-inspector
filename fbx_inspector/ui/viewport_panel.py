@@ -109,6 +109,33 @@ class IsolatedMeshView:
             else:
                 cmds.select(clear=True)
 
+    def set_source(self, source_mesh: str) -> None:
+        """在原面板中换成另一 LOD 的隔离副本，不改变相机与坐标约定。
+
+        relative=True 很重要：content 承载当前坐标系变换，新副本必须直接继承它。
+        Maya 默认的保持世界变换会给新副本写入抵消矩阵，看起来就像坐标系被重置。
+        """
+        cmds = _cmds()
+        old_dup = self.dup
+        source_matrix = cmds.xform(
+            source_mesh, query=True, worldSpace=True, matrix=True
+        )
+        dup = cmds.duplicate(source_mesh, name=DUP_NAME, returnRootsOnly=True)[0]
+        cmds.parent(dup, self.content, relative=True)
+        # 首次创建 content 时，副本的世界矩阵会成为其局部基准矩阵。切换时显式
+        # 复现这一点，兼容 LOD 源模型位于带变换父组下的情况。
+        cmds.xform(dup, matrix=source_matrix, objectSpace=True)
+        self.source = source_mesh
+        self.dup = dup
+        try:
+            cmds.delete(old_dup)
+        except RuntimeError:
+            pass
+        if self.current_convention().is_mirror:
+            cmds.polyNormal(self.dup, normalMode=0, userNormalMode=0, ch=False)
+        # 不调用 _fit_camera：LOD 切换应保留用户当前的 tumble / pan / zoom。
+        cmds.refresh()
+
     def camera_view_rotation(self):
         """相机的世界→相机旋转(3x3),供右上角方向指示器把世界轴投影到屏幕。
 

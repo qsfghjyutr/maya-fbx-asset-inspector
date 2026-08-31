@@ -123,14 +123,16 @@ def _make_window_class():
     class InspectorWindow(QtWidgets.QMainWindow):
         """FBX 资产检查窗口(挂在 Maya 主窗口下的浮动窗口)。"""
 
-        def __init__(self, mesh_name: str, parent=None) -> None:
+        def __init__(self, mesh_name: str, lod_meshes=None, parent=None) -> None:
             super().__init__(parent)
             self.setObjectName(_OBJECT_NAME)
             self.setWindowFlags(QtCore.Qt.Window)
             self.setWindowTitle(f"FBX Inspector — {mesh_name}")
             self.resize(720, 640)
 
-            self._mesh_name = mesh_name
+            self._lod_meshes = dict(lod_meshes or {0: mesh_name})
+            self._lod_levels = sorted(self._lod_meshes)
+            self._mesh_name = self._lod_meshes[self._lod_levels[0]]
             self._source_view = MeshData(mesh_name)
             self._view = IsolatedMeshView(mesh_name)
             self._current = None  # (source, set_name, component)
@@ -158,6 +160,22 @@ def _make_window_class():
             self._preset_combo.currentIndexChanged.connect(self._update_preset_description)
             self._run_preset_button.clicked.connect(self._run_preset)
             self._update_preset_description()
+
+            lod_row = QtWidgets.QHBoxLayout()
+            lod_row.addWidget(QtWidgets.QLabel("LOD"))
+            self._lod_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+            self._lod_slider.setRange(0, len(self._lod_levels) - 1)
+            self._lod_slider.setSingleStep(1)
+            self._lod_slider.setPageStep(1)
+            self._lod_slider.setTickPosition(QtWidgets.QSlider.TicksBelow)
+            self._lod_slider.setTickInterval(1)
+            self._lod_slider.setEnabled(len(self._lod_levels) > 1)
+            lod_row.addWidget(self._lod_slider, stretch=1)
+            self._lod_label = QtWidgets.QLabel(f"LOD{self._lod_levels[0]}")
+            self._lod_label.setMinimumWidth(48)
+            lod_row.addWidget(self._lod_label)
+            root.addLayout(lod_row)
+            self._lod_slider.valueChanged.connect(self._change_lod)
 
             self._cs_combo = QtWidgets.QComboBox()
             self._uv_combo = QtWidgets.QComboBox()
@@ -253,8 +271,38 @@ def _make_window_class():
             return row
 
         def _populate_channels(self) -> None:
+            current_cs = self._cs_combo.currentText()
+            current_uv = self._uv_combo.currentText()
+            self._cs_combo.clear()
+            self._uv_combo.clear()
             self._cs_combo.addItems(self._source_view.color_set_names())
             self._uv_combo.addItems(self._source_view.uv_set_names())
+            for combo, previous in (
+                (self._cs_combo, current_cs),
+                (self._uv_combo, current_uv),
+            ):
+                index = combo.findText(previous)
+                if index >= 0:
+                    combo.setCurrentIndex(index)
+
+        def _change_lod(self, slider_index) -> None:
+            level = self._lod_levels[slider_index]
+            mesh_name = self._lod_meshes[level]
+            self._view.set_source(mesh_name)
+            self._mesh_name = mesh_name
+            self._source_view = MeshData(mesh_name)
+            self._lod_label.setText(f"LOD{level}")
+            self.setWindowTitle(f"FBX Inspector — {mesh_name}")
+            self._populate_channels()
+            if self._current is not None:
+                source, _, component = self._current
+                combo = self._combo_for(source)
+                if combo.currentText():
+                    self._current = (source, combo.currentText(), component)
+                    self._apply()
+                else:
+                    self._current = None
+                    self._range_label.setText("min / max：—")
 
         def _populate_presets(self, registry) -> None:
             profiles = registry.all()
@@ -419,9 +467,13 @@ def open_inspector(mesh_name: str = ""):
             raise RuntimeError("请先选中一个网格,或以 open_inspector('meshName') 指定。")
         mesh_name = sel[0]
 
+    from .lod import discover_lod_meshes
+
+    lod_meshes = discover_lod_meshes(mesh_name)
+    first_mesh = lod_meshes[sorted(lod_meshes)[0]]
     _purge_leftovers()  # 清掉上一次的窗口/面板/副本/相机(按名字,不依赖 Python 引用)
 
     cls = _make_window_class()
-    win = cls(mesh_name, parent=_maya_main_window())
+    win = cls(first_mesh, lod_meshes=lod_meshes, parent=_maya_main_window())
     win.show()
     return win
