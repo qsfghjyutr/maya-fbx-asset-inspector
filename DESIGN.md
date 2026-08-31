@@ -50,8 +50,8 @@ fbx_inspector/
     colorset.py   标量 → 显示 color set(原生视口)   仅 Maya,惰性
     viewport.py   顶点数值文字 → VP2 DrawOverride                    仅 Maya,惰性
     viewport_plugin.py  数值标签 locator + MPxDrawOverride          仅 Maya
-  rules/      # Rule / Profile:把通道绑定到角色,打包 解码+可视化+校验   与 Maya 无关
-  presets/    # 内置默认 Profile;与 user_rules/_template.py 保持同一基准配置
+  rules/      # Rule / Profile + 可视化前的网格级检查与 LOD 分级规则    与 Maya 无关
+  presets/    # 内置零门槛体验 Profile;用户规范从 user_rules/_template.py 起步
   report.py   # RuleResult / Report,文本 + json                    与 Maya 无关
   api.py      # 高层编排入口
   ui/         # PySide6 浮动窗口 + 内嵌隔离视口                     仅 Maya,惰性
@@ -84,9 +84,13 @@ Rule(
 )
 ```
 
-一个 **Profile(检查预设)** 是一组带显示名称、说明和可选资产名匹配器的具名规则集合,因此工作室
-可以把“我们的环境道具规范”作为一个对象整体交付。检查器会把内置默认 Profile 与用户登记的
-Profile 放进预设下拉框,一键依次执行全部 Rule 并汇总报告。单条规则失败会被记录,不会阻断其余规则。
+一个 **Profile(检查预设)** 包含具名 Rule、可选资产名匹配器以及可视化前的网格级检查。工作室可用
+`preflight_checks` 配置统一规范；它默认作用于发现的全部 LOD。`lod_preflight_checks` 以 LOD 序号
+为键，并按检查 `id` 覆盖该 LOD 的默认要求。当前内置网格级检查 `UVSetCountCheck` 支持精确数量或
+最小/最大范围。任一前置检查产生错误时，流水线停止，不执行可视化 Rule。
+
+检查器会把内置默认 Profile 与用户登记的 Profile 放进预设下拉框。通过前置检查后，一键依次执行
+全部 Rule 并汇总报告；单条可视化规则失败会被记录，不阻断其余规则。
 
 ## 可视化策略(按数据类型分层)
 
@@ -115,8 +119,10 @@ Profile 放进预设下拉框,一键依次执行全部 Rule 并汇总报告。�
 
 文件名以下划线开头者被跳过(模板/私有)。`plugins.discover()` 默认先加载内置示例再加载用户目录;
 检查器启动时使用 `include_examples=False`,另外显式注册 `presets/default.py`,因此正式预设列表
-初始只有“默认”,随后追加用户 Profile。`user_rules/_template.py` 与默认预设采用相同规则结构,
-复制并去掉文件名前导下划线即可创建新预设。
+初始只有“默认”,随后追加用户 Profile。内置默认预设不启用 UV 集数量限制，以便直接体验可视化，
+但源码保留统一限制与 LOD 分级覆盖的注释示例。`user_rules/_template.py` 是规范配置起点：它实际
+启用“全部 LOD 要求 2 个 UV 集”，LOD1 分级要求只以注释示范。复制并去掉文件名前导下划线即可创建
+新预设。
 
 ## 独立 GUI 检查窗口(嵌入隔离面板)
 
@@ -135,7 +141,8 @@ Profile 放进预设下拉框,一键依次执行全部 Rule 并汇总报告。�
 `IsolatedMeshView.set_source` 只替换 content 下的网格副本,不重新 `viewFit`,因此保留专属相机的
 tumble、pan、zoom。新副本以源网格世界矩阵作为局部基准矩阵,直接继承 content 上已有的坐标约定
 变换和镜像补偿,避免 Maya 的“保持世界变换”抵消坐标系。窗口同时保留可视化控件状态与同名
-Color/UV Set 选择,再对新 LOD 重跑当前规则;只有目标 LOD 缺少当前通道时才回退。
+Color/UV Set 选择,再对新 LOD 重跑当前规则;只有目标 LOD 缺少当前通道时才回退。执行 Profile 时，
+前置检查会独立读取整组 LOD；默认要求应用到每一档，指定 LOD 的同 id 规则负责覆盖。
 
 这是"只读消费端"的又一形态:复用 `MeshData` → `ScalarFromComponent` → `ColorSetRemapVisualizer`
 (`ui/channels.py::scalar_rule_for` 把三者按通道装配成 `Rule`),只是把着色目标从场景原物体换成了副本。

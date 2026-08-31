@@ -37,8 +37,13 @@
 
 ## 默认预设与 Template
 
-内置“默认”预设与 `_template.py` 都检查 `colorSet1` 的 R/G/B/A 是否位于 [0,1]，并为四个
-分量分别生成灰度显示 color set。Template 是可编辑副本的起点，不会被加载器直接执行。
+内置“默认”预设用于零门槛体验：它检查 `colorSet1` 的 R/G/B/A 并生成四套灰度显示，但不限制
+UV 集数量；源码中保留了启用数量限制及 LOD 分级覆盖的注释示例。`_template.py` 是工作室规则的
+可编辑起点，默认示范“全部 LOD 均要求 2 个 UV 集”，而 LOD1 的不同要求仅以注释展示。
+
+`preflight_checks=[UVSetCountCheck(expected=2)]` 默认检查资产的全部 LOD。只有确实存在分级规范时，
+才配置 `lod_preflight_checks={1: [UVSetCountCheck(expected=1)]}`；相同检查 id 会覆盖该 LOD 的
+默认要求。前置检查失败时不会进入可视化阶段。
 
 注意：
 

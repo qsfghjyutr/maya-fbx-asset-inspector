@@ -13,6 +13,7 @@ from fbx_inspector.core.channel import Channel, SourceType
 from fbx_inspector.core.registry import register_profile
 from fbx_inspector.decode.builtin import ScalarFromComponent
 from fbx_inspector.rules.profile import Profile, Rule
+from fbx_inspector.rules.preflight import UVSetCountCheck
 from fbx_inspector.validate.builtin import RangeCheck
 from fbx_inspector.visualize.colorset import ColorSetRemapVisualizer
 
@@ -39,6 +40,10 @@ def _build_profile() -> Profile:
         description="检查 colorSet1 的 R/G/B/A 范围，并生成四套灰度可视化。",
         rules=rules,
         match_pattern=None,
+        # 未配置分级规则时，该要求会自动检查全部 LOD。
+        preflight_checks=[UVSetCountCheck(expected=2)],
+        # 如各 LOD 要求不同，可按检查 id 覆盖默认要求：
+        # lod_preflight_checks={1: [UVSetCountCheck(expected=1)]},
     )
 
 

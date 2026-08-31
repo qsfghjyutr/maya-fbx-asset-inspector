@@ -21,6 +21,13 @@ from ..core.types import RuleResult
 from ..decode.base import Decoder
 from ..validate.base import Validator
 from ..visualize.base import Visualizer
+from .preflight import PreflightMeshLike
+
+
+class PreflightCheck(Protocol):
+    id: str
+
+    def run(self, mesh: PreflightMeshLike, lod: int) -> RuleResult: ...
 
 
 class MeshLike(Protocol):
@@ -76,6 +83,10 @@ class Profile:
     name: str | None = None
     #: 给使用者看的简短说明。
     description: str = ""
+    #: 默认对每个 LOD 执行的前置检查。
+    preflight_checks: list[PreflightCheck] = field(default_factory=list)
+    #: 指定 LOD 的分级规则；同 id 检查覆盖默认规则，其余默认检查仍保留。
+    lod_preflight_checks: dict[int, list[PreflightCheck]] = field(default_factory=dict)
 
     @property
     def display_name(self) -> str:
@@ -87,4 +98,25 @@ class Profile:
         return re.search(self.match_pattern, asset_name) is not None
 
     def run(self, mesh: MeshLike, ctx: InspectionContext) -> list[RuleResult]:
-        return [rule.run(mesh, ctx) for rule in self.rules]
+        preflight = self.run_preflight({0: mesh})
+        if any(result.error_count for result in preflight):
+            return preflight
+        return preflight + [rule.run(mesh, ctx) for rule in self.rules]
+
+    def preflight_for_lod(self, lod: int) -> list[PreflightCheck]:
+        """取得某 LOD 的有效规则：默认作用于全部 LOD，同 id 可分级覆盖。"""
+        effective = {check.id: check for check in self.preflight_checks}
+        for check in self.lod_preflight_checks.get(lod, []):
+            effective[check.id] = check
+        return list(effective.values())
+
+    def run_preflight(
+        self, lod_meshes: dict[int, PreflightMeshLike]
+    ) -> list[RuleResult]:
+        results = []
+        for lod in sorted(lod_meshes):
+            results.extend(
+                check.run(lod_meshes[lod], lod)
+                for check in self.preflight_for_lod(lod)
+            )
+        return results

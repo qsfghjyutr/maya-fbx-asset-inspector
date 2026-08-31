@@ -353,8 +353,18 @@ def _make_window_class():
                 )
                 return
 
-            results = []
+            # 前置检查覆盖资产的全部 LOD；失败时不进入可视化阶段。
+            lod_views = {
+                level: MeshData(mesh_name)
+                for level, mesh_name in self._lod_meshes.items()
+            }
+            results = profile.run_preflight(lod_views)
             failures = []
+            if any(result.error_count for result in results):
+                self._report.setPlainText(
+                    build_report(self._mesh_name, results).to_text()
+                )
+                return
             for rule in profile.rules:
                 try:
                     results.append(

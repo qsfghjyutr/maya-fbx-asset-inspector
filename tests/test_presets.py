@@ -14,4 +14,6 @@ def test_default_preset_is_registered_and_is_the_template_baseline():
         "default_colorSet1_B",
         "default_colorSet1_A",
     ]
+    assert profile.preflight_checks == []
+    assert profile.lod_preflight_checks == {}
     assert PROFILES.get(DEFAULT_PROFILE_ID).display_name == "默认"

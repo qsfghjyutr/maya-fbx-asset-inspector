@@ -100,9 +100,13 @@ only the isolated preview duplicate and refreshes the current channel data. Came
 zoom, coordinate convention, visualization options, and same-named Color/UV Set selections are
 preserved. A channel selection falls back only when that channel is absent from the target LOD.
 
-The **Inspection preset** selector runs every Rule in a Profile with one click and combines their
-results into one report. The built-in **Default** preset checks `colorSet1` R/G/B/A against [0, 1]
-and creates four grayscale display color sets. After batch execution, the channel that was being
+The **Inspection preset** selector first runs a Profile's preflight checks, then runs every Rule
+and combines the results into one report. Preflight checks apply to every discovered LOD by
+default; a Profile may override a check by ID for specific LOD levels. Any preflight error stops
+visualization. The built-in **Default** preset intentionally has no UV-set-count restriction so
+new users can try the visualization features immediately. It checks `colorSet1` R/G/B/A against
+[0, 1] and creates four grayscale display color sets. Its source includes commented examples for
+a shared UV-set count and an LOD-specific override. After batch execution, the channel that was
 viewed manually is refreshed and restored instead of leaving the viewport on the preset's last
 rule.
 
@@ -114,93 +118,29 @@ or `~/.fbx_inspector/rules`. Copy `user_rules/_template.py` to a filename that d
 `_`, edit its Profile, and reopen the inspector from the shelf. Registered Profiles appear
 automatically in the preset selector; no core-package edits are required. Direct calls to
 `plugins.discover()` still load shipped examples plus user rules, while the production inspector
-intentionally lists the built-in default and user Profiles only.
+intentionally lists the built-in default and user Profiles only. The template actively demonstrates
+an all-LOD requirement of two UV sets; its LOD1 override remains commented out until needed.
 
 ### Project structure
 
-The tree below covers only maintained project files that are version-controlled or intended for
-the current change.
-
 ```text
 maya-fbx-asset-inspector/
-├─ fbx_inspector/                    Main Python package
-│  ├─ __init__.py                    Package metadata; safe to import outside Maya
-│  ├─ api.py                         Public run_profile / clear_visualizations API
-│  ├─ plugins.py                     Discovers built-in examples and user rule files
-│  ├─ report.py                      Text/JSON inspection report assembly
-│  ├─ maya_plugin.py                 Aggregates Maya plugin registration entry points
-│  ├─ core/                          Shared data model and infrastructure
-│  │  ├─ __init__.py                 Core package marker
-│  │  ├─ channel.py                  Channel types and face-vertex channel data
-│  │  ├─ context.py                  Options shared by one inspection run
-│  │  ├─ coord_convention.py         Maya/UE axes, handedness, matrices, and UV-V conversion
-│  │  ├─ mesh_data.py                Maya API mesh and color/UV-set access
-│  │  ├─ registry.py                 Decoder, visualizer, validator, and Profile registries
-│  │  ├─ remap.py                    Ramp curves and interpolation presets
-│  │  └─ types.py                    Decoded values, issues, results, and visualization metadata
-│  ├─ decode/                        Raw-channel decoding
-│  │  ├─ __init__.py                 Decoder package exports
-│  │  ├─ base.py                     Decoder base class and input-role validation
-│  │  └─ builtin.py                  Scalar, vector, and packed-value decoders
-│  ├─ validate/                      Decoded-data checks
-│  │  ├─ __init__.py                 Validator package exports
-│  │  ├─ base.py                     Validator interface
-│  │  └─ builtin.py                  Range, finite, normalized, and constant checks
-│  ├─ visualize/                     Viewport output implementations
-│  │  ├─ __init__.py                 Visualizer package exports
-│  │  ├─ base.py                     Visualizer base class, ramps, and clamp helpers
-│  │  ├─ colorset.py                 Scalar-to-color-set heatmap visualization
-│  │  ├─ viewport.py                 Numeric-label formatting, grouping, and node payloads
-│  │  └─ viewport_plugin.py          VP2 locator and MPxDrawOverride text drawing
-│  ├─ rules/                         Rule and Profile composition
-│  │  ├─ __init__.py                 Rules package marker
-│  │  └─ profile.py                  Rule execution and named multi-rule Profile presets
-│  ├─ presets/                       Production presets shown by the inspector
-│  │  ├─ __init__.py                 Preset package exports
-│  │  └─ default.py                  Built-in colorSet1 RGBA default preset
-│  ├─ examples/                      Programmatic API examples, not production UI presets
-│  │  ├─ __init__.py                 Registers shipped examples when imported
-│  │  └─ vertex_color_channels.py    Per-channel vertex-color Profile example
-│  └─ ui/                            Maya/PySide inspector interface
-│     ├─ __init__.py                 Lazy open_inspector export
-│     ├─ axis_indicator.py           Camera-following Maya/UE handedness indicator
-│     ├─ channels.py                 Manual channel-selection Rule factory
-│     ├─ lod.py                      LOD name parsing and Maya DAG discovery
-│     ├─ viewport_panel.py           Isolated duplicate, camera, and embedded modelPanel
-│     └─ window.py                   Floating window, preset runner, controls, and report pane
-├─ user_rules/                       User-owned preset and rule area
-│  ├─ _template.py                   Copyable preset matching the built-in default
-│  └─ README.md                      User preset authoring and discovery instructions
-├─ scripts/                          Development and Maya verification helpers
-│  ├─ maya_smoke_test.py             Headless mayapy integration smoke test
-│  └─ reload_dev.py                  Removes cached modules during Maya development
-├─ tests/                            Maya-free automated test suite
-│  ├─ __init__.py                    Test package marker
-│  ├─ conftest.py                    Test import-path/bootstrap setup
-│  ├─ test_axis_indicator.py         Axis projection and UE handedness regressions
-│  ├─ test_channels.py               Manual channel Rule factory tests
-│  ├─ test_context.py                Inspection-context default tests
-│  ├─ test_coord_convention.py       Coordinate and UV conversion tests
-│  ├─ test_decode.py                 Built-in decoder tests
-│  ├─ test_examples.py               Shipped example Profile tests
-│  ├─ test_lod.py                    LOD naming parser tests
-│  ├─ test_plugins.py                User rule discovery/loading tests
-│  ├─ test_presets.py                Default preset registration tests
-│  ├─ test_remap.py                  Ramp curve tests
-│  ├─ test_rules.py                  Rule/Profile execution and report tests
-│  ├─ test_validate.py               Built-in validator tests
-│  └─ test_viewport_text.py          Numeric formatting and coincident-label tests
-├─ fbx_inspector_plugin.py           Trusted Maya plug-in bridge installed per user
-├─ install.py                        Drag-and-drop Maya installer and uninstaller
-├─ run_tests.py                      Zero-dependency test runner
-├─ pyproject.toml                    Packaging, Python, pytest, Ruff, and mypy configuration
-├─ README.md                         User-facing English/Chinese guide
-├─ DESIGN.md                         Architecture, invariants, and implementation decisions
-├─ LICENSE                           Project license
-├─ .editorconfig                     Cross-editor whitespace conventions
-├─ .gitattributes                    Git text and attribute rules
-└─ .gitignore                        Files excluded from version control
+├─ fbx_inspector/     Main package
+│  ├─ core/           Data model, Maya mesh access, context, and registries
+│  ├─ decode/         Raw-channel decoders
+│  ├─ validate/       Decoded-data validators
+│  ├─ visualize/      Color-set and Viewport 2.0 visualization
+│  ├─ rules/          Rules, Profiles, and preflight checks
+│  ├─ presets/        Built-in production presets
+│  ├─ examples/       Programmatic examples
+│  └─ ui/             Maya/PySide inspector and LOD discovery
+├─ user_rules/        User-owned rule templates and documentation
+├─ scripts/           Development and Maya verification helpers
+└─ tests/             Maya-free automated tests
 ```
+
+Root-level files provide installation, packaging, testing, design documentation, and the Maya
+plug-in bridge.
 
 ### Concepts
 
@@ -211,8 +151,9 @@ maya-fbx-asset-inspector/
 - **Validator** — checks decoded data (range, NaN/Inf, normalized, constant) and reports
   issues located at exact face-vertices.
 - **Rule / Profile** — a Rule binds channels to a decoder and pairs it with a visualizer +
-  validators; a Profile is a named, described preset with an optional asset-name matcher and any
-  number of Rules.
+  validators; a Profile is a named, described preset with an optional asset-name matcher,
+  preflight checks,
+  LOD-specific overrides, and any number of Rules.
 
 The pipeline's unit is the **face-vertex**, so hard edges and UV seams are handled correctly
 rather than averaged away. See [DESIGN.md](DESIGN.md).
@@ -340,9 +281,11 @@ LOD 资产既可以选中其中一个 LOD 网格打开,也可以选中包含全�
 拖动滑动条只替换隔离预览副本并刷新当前通道数据,相机旋转/平移/缩放、坐标系、可视化选项及
 同名 Color/UV Set 选择均保持不变。只有目标 LOD 缺少当前通道时才会回退到可用通道。
 
-“检查预设”下拉框可以一键执行一个 Profile 中的全部 Rule,并把结果合并成一份报告。内置
-“默认”预设检查 `colorSet1` 的 R/G/B/A 是否位于 [0,1],同时生成四套灰度显示 color set。
-批量执行结束后会自动刷新并恢复执行前手动查看的通道,不会停留在最后一条预设规则上。
+“检查预设”会先执行 Profile 的前置检查,通过后再执行全部 Rule,并把结果合并成一份报告。前置检查
+默认对发现的全部 LOD 生效;Profile 可以按检查 id 为指定 LOD 覆盖要求。任一前置检查报错都会停止
+后续可视化。内置“默认”预设不启用 UV 集数量限制,方便首次使用者直接体验全部可视化功能;它仍会
+检查 `colorSet1` 的 R/G/B/A 是否位于 [0,1],同时生成四套灰度显示 color set。默认预设源码中提供了
+统一 UV 集数量和 LOD 分级覆盖的注释示例。批量执行结束后会自动刷新并恢复执行前手动查看的通道。
 
 ### 你自己的规则(系统更新不覆盖)
 
@@ -350,92 +293,28 @@ LOD 资产既可以选中其中一个 LOD 网格打开,也可以选中包含全�
 `FBX_INSPECTOR_RULE_PATH`,或用仓库的 `user_rules/`,或 `~/.fbx_inspector/rules`。复制
 `user_rules/_template.py` 并改成不以下划线开头的文件名,编辑并登记 Profile,再从工具架重开
 检查器;用户预设会自动出现在下拉框中,无需修改核心包。直接调用 `plugins.discover()` 仍会加载
-内置示例和用户规则;正式检查器只列出内置默认预设与用户 Profile。
+内置示例和用户规则;正式检查器只列出内置默认预设与用户 Profile。模板实际示范“所有 LOD 均要求
+2 个 UV 集”,LOD1 覆盖则保持注释,仅在确有分级规范时启用。
 
 ### 项目结构
 
-下面只列出受版本控制或将在当前变更中纳入版本控制的项目文件。
-
 ```text
 maya-fbx-asset-inspector/
-├─ fbx_inspector/                    主 Python 包
-│  ├─ __init__.py                    包元数据;可在 Maya 外安全导入
-│  ├─ api.py                         run_profile / clear_visualizations 公共 API
-│  ├─ plugins.py                     发现内置示例与用户规则文件
-│  ├─ report.py                      组装文本和 JSON 检查报告
-│  ├─ maya_plugin.py                 汇总 Maya 插件注册入口
-│  ├─ core/                          共享数据模型与基础设施
-│  │  ├─ __init__.py                 core 包标记
-│  │  ├─ channel.py                  通道类型与逐面顶点通道数据
-│  │  ├─ context.py                  单次检查共享选项
-│  │  ├─ coord_convention.py         Maya/UE 轴、手性、矩阵与 UV-V 转换
-│  │  ├─ mesh_data.py                Maya API 网格及 color/UV set 访问
-│  │  ├─ registry.py                 Decoder、Visualizer、Validator、Profile 注册表
-│  │  ├─ remap.py                    Ramp 曲线与插值预设
-│  │  └─ types.py                    解码数据、问题、结果和可视化元数据
-│  ├─ decode/                        原始通道解码
-│  │  ├─ __init__.py                 Decoder 包导出
-│  │  ├─ base.py                     Decoder 基类与输入角色校验
-│  │  └─ builtin.py                  标量、向量和打包数值解码器
-│  ├─ validate/                      解码数据校验
-│  │  ├─ __init__.py                 Validator 包导出
-│  │  ├─ base.py                     Validator 接口
-│  │  └─ builtin.py                  范围、有限值、归一化和常量检查
-│  ├─ visualize/                     视口输出实现
-│  │  ├─ __init__.py                 Visualizer 包导出
-│  │  ├─ base.py                     Visualizer 基类、色带和 clamp 工具
-│  │  ├─ colorset.py                 标量到 color set 热力图可视化
-│  │  ├─ viewport.py                 数值标签格式、重合合并与节点载荷
-│  │  └─ viewport_plugin.py          VP2 locator 与 MPxDrawOverride 文字绘制
-│  ├─ rules/                         Rule 与 Profile 组合
-│  │  ├─ __init__.py                 rules 包标记
-│  │  └─ profile.py                  Rule 执行和具名多规则 Profile 预设
-│  ├─ presets/                       检查器显示的正式预设
-│  │  ├─ __init__.py                 预设包导出
-│  │  └─ default.py                  内置 colorSet1 RGBA 默认预设
-│  ├─ examples/                      编程 API 示例,不进入正式 UI 预设列表
-│  │  ├─ __init__.py                 导入时登记随附示例
-│  │  └─ vertex_color_channels.py    逐通道顶点色 Profile 示例
-│  └─ ui/                            Maya/PySide 检查器界面
-│     ├─ __init__.py                 惰性导出 open_inspector
-│     ├─ axis_indicator.py           随相机转动的 Maya/UE 手性指示器
-│     ├─ channels.py                 手动选择通道的 Rule 工厂
-│     ├─ lod.py                      LOD 名称解析与 Maya DAG 发现
-│     ├─ viewport_panel.py           隔离副本、相机与内嵌 modelPanel
-│     └─ window.py                   浮动窗口、预设执行、控件与报告区
-├─ user_rules/                       用户拥有的预设与规则目录
-│  ├─ _template.py                   与内置默认配置一致的可复制模板
-│  └─ README.md                      用户预设编写与发现说明
-├─ scripts/                          开发及 Maya 验证工具
-│  ├─ maya_smoke_test.py             mayapy 无头集成冒烟测试
-│  └─ reload_dev.py                  Maya 开发时移除缓存模块
-├─ tests/                            不依赖 Maya 的自动化测试
-│  ├─ __init__.py                    测试包标记
-│  ├─ conftest.py                    测试导入路径与启动配置
-│  ├─ test_axis_indicator.py         坐标轴投影及 UE 手性回归测试
-│  ├─ test_channels.py               手动通道 Rule 工厂测试
-│  ├─ test_context.py                检查上下文默认值测试
-│  ├─ test_coord_convention.py       坐标及 UV 转换测试
-│  ├─ test_decode.py                 内置 Decoder 测试
-│  ├─ test_examples.py               随附示例 Profile 测试
-│  ├─ test_lod.py                    LOD 命名解析测试
-│  ├─ test_plugins.py                用户规则发现与加载测试
-│  ├─ test_presets.py                默认预设注册测试
-│  ├─ test_remap.py                  Ramp 曲线测试
-│  ├─ test_rules.py                  Rule/Profile 执行与报告测试
-│  ├─ test_validate.py               内置 Validator 测试
-│  └─ test_viewport_text.py          数值格式和重合标签测试
-├─ fbx_inspector_plugin.py           安装到用户目录的可信 Maya 插件桥
-├─ install.py                        Maya 拖拽安装器与卸载器
-├─ run_tests.py                      零依赖测试运行器
-├─ pyproject.toml                    打包、Python、pytest、Ruff、mypy 配置
-├─ README.md                         面向用户的中英文说明
-├─ DESIGN.md                         架构、不变量与实现决策
-├─ LICENSE                           项目许可证
-├─ .editorconfig                     跨编辑器空白约定
-├─ .gitattributes                    Git 文本及属性规则
-└─ .gitignore                        版本控制排除规则
+├─ fbx_inspector/     主包
+│  ├─ core/           数据模型、Maya 网格访问、上下文与注册表
+│  ├─ decode/         原始通道解码
+│  ├─ validate/       解码数据校验
+│  ├─ visualize/      Color Set 与 Viewport 2.0 可视化
+│  ├─ rules/          Rule、Profile 与前置检查
+│  ├─ presets/        内置正式预设
+│  ├─ examples/       编程示例
+│  └─ ui/             Maya/PySide 检查器与 LOD 发现
+├─ user_rules/        用户规则模板与说明
+├─ scripts/           开发和 Maya 验证工具
+└─ tests/             不依赖 Maya 的自动化测试
 ```
+
+根目录文件负责安装、打包、测试、设计文档及 Maya 插件桥接。
 
 ### 核心概念
 
@@ -446,7 +325,7 @@ maya-fbx-asset-inspector/
 - **Validator(校验器)**—— 校验解码数据(范围、NaN/Inf、归一化、常量),并把问题精确定位到
   面顶点。
 - **Rule / Profile(规则 / 预设)**—— Rule 把通道绑定到解码器,再配可视化器 + 校验器;
-  Profile 带显示名称、说明和可选资产名匹配器,按工作室规范打包任意数量的规则。
+  Profile 带显示名称、说明、可选资产名匹配器、前置检查与 LOD 分级覆盖,并打包任意数量的规则。
 
 流水线的基本单位是**面顶点(face-vertex)**,因此硬边与 UV 缝会被正确处理,而非被平均掉。
 详见 [DESIGN.md](DESIGN.md)。
