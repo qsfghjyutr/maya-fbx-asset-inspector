@@ -7,7 +7,7 @@
   1. 把本仓库根目录加入当前会话的 sys.path(立即可用);
   2. 写入 <maya>/scripts/userSetup.py(幂等),使重启 Maya 后仍能 import;
   3. 在 Maya 用户 plug-ins 目录安装一个通用可信加载桥,实际插件代码仍从仓库读取;
-  4. 在当前工具架上创建一个 "FBXi" 按钮,点击即重载并打开检查窗口。
+  4. 在 Maya 内置 UV Editing(中文显示为“UV 编辑”)工具架上创建一个 "FBXi" 按钮。
 
 为何需要加载桥:Inspector 本体是普通 Python 包,加入 sys.path 即可,不会经过 Maya 的插件安全
 检查;数值标签使用 MPxLocatorNode / MPxDrawOverride,必须由 cmds.loadPlugin 注册。若直接从仓库
@@ -44,6 +44,7 @@ open_inspector()"""
 _MARK_BEGIN = "# >>> fbx_inspector path >>>"
 _MARK_END = "# <<< fbx_inspector path <<<"
 _BUTTON_LABEL = "FBX Inspector"
+_SHELF_NAME = "UVEditing"
 _PLUGIN_ID = "fbx_inspector_plugin"
 _PLUGIN_FILENAME = f"{_PLUGIN_ID}.py"
 _PLUGIN_LOADER = os.path.join(_REPO, _PLUGIN_FILENAME)
@@ -151,12 +152,26 @@ def _install_plugin_bridge() -> str:
     return target
 
 
-def _current_shelf() -> str:
-    import maya.cmds as cmds  # type: ignore[import-not-found]
+def _shelf_top_level() -> str:
     import maya.mel as mel  # type: ignore[import-not-found]
 
-    top = mel.eval("$tmp = $gShelfTopLevel")
-    return cmds.tabLayout(top, query=True, selectTab=True)
+    return mel.eval("$tmp = $gShelfTopLevel")
+
+
+def _all_shelves() -> list[str]:
+    import maya.cmds as cmds  # type: ignore[import-not-found]
+
+    return cmds.tabLayout(_shelf_top_level(), query=True, childArray=True) or []
+
+
+def _target_shelf() -> str:
+    """返回 Maya 内置 UV Editing Shelf；显示名由 Maya 负责本地化。"""
+    for shelf in _all_shelves():
+        if shelf.rsplit("|", 1)[-1] == _SHELF_NAME:
+            return shelf
+    raise RuntimeError(
+        f"找不到 Maya 内置工具架 '{_SHELF_NAME}'；为保护 Shelf 配置，安装已停止。"
+    )
 
 
 def _remove_existing_button(shelf: str) -> None:
@@ -185,12 +200,18 @@ def _make_button(shelf: str) -> str:
     )
 
 
+def _remove_all_existing_buttons() -> None:
+    for shelf in _all_shelves():
+        _remove_existing_button(shelf)
+
+
 def install() -> None:
     """执行安装:加 path、写 userSetup、安装插件桥、建工具架按钮。"""
     _ensure_on_path()
     us = _persist_path()
     bridge = _install_plugin_bridge()
-    shelf = _current_shelf()
+    _remove_all_existing_buttons()
+    shelf = _target_shelf()
     _make_button(shelf)
     print(f"[FBX Inspector] 已在工具架 '{shelf}' 上创建按钮。")
     print(f"[FBX Inspector] 路径已写入 {us},重启 Maya 后依然可用。")
@@ -199,8 +220,7 @@ def install() -> None:
 
 def uninstall() -> None:
     """移除工具架按钮、启动路径与通用 Maya 插件可信加载桥。"""
-    shelf = _current_shelf()
-    _remove_existing_button(shelf)
+    _remove_all_existing_buttons()
 
     us = _usersetup_path()
     if os.path.exists(us):

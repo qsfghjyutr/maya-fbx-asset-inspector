@@ -38,7 +38,8 @@ visualization remains deferred.
 ### Install (for use inside Maya)
 
 **Drag `install.py` from a file browser into the Maya viewport** (or Maya menu File → Source
-Script… → pick it). This creates an **FBXi** shelf button that opens the inspector, and registers
+Script… → pick it). This creates an **FBXi** button on Maya's built-in **UV Editing** shelf
+(**UV 编辑** in Chinese Maya), opens the inspector, and registers
 the repo on Maya's Python path via `userSetup.py` so it survives restarts — no typed paths, no
 hardcoding (the location is derived from the file itself). The shelf button reloads the latest code
 on each click, so editing source just needs a re-click. Installation also places one tiny, stable,
@@ -49,6 +50,9 @@ ordinary Inspector modules are imported through `sys.path`, while `MPxDrawOverri
 registered through `loadPlugin()`, which applies Maya's trusted-location security check. Uninstall:
 `import install; install.uninstall()`. The bridge reads the latest repository implementation on
 each Maya startup; Viewport plugin changes therefore require a Maya restart, not reinstallation.
+The installer targets the shelf's stable internal name, `UVEditing`; Maya localizes its visible
+label. For safety, the installer never creates, renames, or deletes a shelf. If that built-in shelf
+is unavailable, installation stops with an error instead of changing Maya's shelf configuration.
 
 For off-DCC development: `pip install -e ".[dev]"`.
 
@@ -224,7 +228,8 @@ fork。
 ### 安装(在 Maya 内使用)
 
 **把 `install.py` 从资源管理器拖进 Maya 视口**(或 Maya 菜单 File → Source Script… 选中它)。这会
-创建一个 **FBXi** 工具架按钮用于打开检查器,并通过 `userSetup.py` 把仓库注册到 Maya 的 Python
+在 Maya 内置 **UV Editing** 工具架(中文界面显示为 **UV 编辑**)中创建一个 **FBXi** 按钮,
+并通过 `userSetup.py` 把仓库注册到 Maya 的 Python
 路径上,重启后依然可用——无需输入路径、无硬编码(位置由文件自身推导)。按钮每次点击都会重载最新
 代码,所以改完源码再点一下即可。安装时还会在 Maya 当前版本的用户 `plug-ins` 目录放置唯一一个很小且
 稳定的通用桥 `fbx_inspector_plugin.py`。它不包含 Inspector 功能实现,只把所有 Maya 插件注册转发到
@@ -232,6 +237,8 @@ fork。
 之所以必须有这层桥,是因为 Inspector 本体作为普通 Python 包通过 `sys.path` 导入,不经过 Maya 插件
 安全检查;而 `MPxDrawOverride` 必须通过 `loadPlugin()` 注册,Maya 会对入口文件执行可信位置检查。
 加载桥会在每次 Maya 启动时读取仓库最新版,所以 Viewport 插件代码更新后只需重启 Maya,无需重新安装。
+安装器使用该工具架的稳定内部名 `UVEditing`,可见名由 Maya 负责本地化。为保护用户配置,
+安装器绝不创建、重命名或删除工具架;如果找不到该 Maya 内置工具架,安装会报错停止。
 卸载:`import install; install.uninstall()`。
 
 脱离 DCC 开发时:`pip install -e ".[dev]"`。

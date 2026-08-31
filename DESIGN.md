@@ -168,6 +168,14 @@ Maya 每次启动并自动加载桥时都会读取仓库当时的最新版,因�
 类不在运行中强制卸载,因为 Maya 会警告这可能破坏稳定性与撤销队列。只有加载桥协议或仓库位置本身变化
 时,才需要再次拖入 `install.py`。
 
+### Shelf 安装约束
+
+FBXi 按钮固定安装到 Maya 内置 UV Editing Shelf。代码只按稳定内部 UI 名
+`UVEditing` 定位;英文界面的 `UV Editing` 和中文界面的 `UV 编辑` 都是 Maya 管理的
+可见标签,不参与控件定位。安装器不得调用 `addNewShelfTab`,也不得创建、重命名或删除
+Shelf;若 `UVEditing` 不存在则立即报错停止,避免写坏 Maya 的 Shelf MEL 文件和 `userPrefs.mel`。
+安装与卸载可遍历现有 Shelf 清理标签为 `FBX Inspector` 的按钮,但不改变 Shelf 本身。
+
 ### 坐标约定(Maya / 引擎)
 
 隔离视口默认按 **Maya**(Y-up、右手)显示,可切换到目标引擎的坐标约定(v1 内置 **UE**:Z-up、左手),
