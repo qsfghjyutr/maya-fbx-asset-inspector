@@ -245,6 +245,49 @@ def _make_window_class():
 
             root.addWidget(self._view.widget, stretch=1)
 
+            # Maya 的 modelPanel 会先于普通 QShortcut 接管按键，且它内嵌后不保证成为
+            # Qt 焦点子控件。因此在应用事件入口截获“鼠标位于本视口”时的核心热键。
+            callbacks = {
+                QtCore.Qt.Key_Q: lambda: self._view.activate_tool("select"),
+                QtCore.Qt.Key_W: lambda: self._view.activate_tool("move"),
+                QtCore.Qt.Key_E: lambda: self._view.activate_tool("rotate"),
+                QtCore.Qt.Key_R: lambda: self._view.activate_tool("scale"),
+                QtCore.Qt.Key_F: self._view.frame_selection,
+                QtCore.Qt.Key_H: self._view.hide_selection,
+            }
+
+            class ViewportHotkeyFilter(QtCore.QObject):
+                def eventFilter(filter_self, watched, event):  # noqa: N802
+                    if event.type() != QtCore.QEvent.KeyPress or not self.isActiveWindow():
+                        return False
+                    local_cursor = self._view.widget.mapFromGlobal(QtGui.QCursor.pos())
+                    if not self._view.widget.rect().contains(local_cursor):
+                        return False
+                    modifiers = event.modifiers()
+                    if event.key() == QtCore.Qt.Key_H and modifiers == QtCore.Qt.ShiftModifier:
+                        if not event.isAutoRepeat():
+                            self._view.show_last_hidden()
+                        return True
+                    if modifiers != QtCore.Qt.NoModifier:
+                        return False
+                    callback = callbacks.get(event.key())
+                    if callback is None:
+                        return False
+                    if not event.isAutoRepeat():
+                        callback()
+                    return True
+
+            self._viewport_hotkey_filter = ViewportHotkeyFilter(self)
+            QtWidgets.QApplication.instance().installEventFilter(
+                self._viewport_hotkey_filter
+            )
+
+            shortcut_help = QtWidgets.QLabel(
+                "视口快捷键：Q 选择　W 移动　E 旋转　R 缩放　H 隐藏　Shift+H 恢复　F 聚焦"
+            )
+            shortcut_help.setStyleSheet("color: #999;")
+            root.addWidget(shortcut_help)
+
             # 右上角方向指示器:作为视口 QWidget 的子控件叠在其上,随镜头/约定实时刷新。
             indicator_cls = make_axis_indicator(
                 self._view.camera_view_rotation, self._view.current_convention

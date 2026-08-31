@@ -62,6 +62,7 @@ class IsolatedMeshView:
         self._coord_id = "maya"  # 当前坐标约定;默认 Maya(恒等,不变换)
         self._mirrored = False   # content 变换当前是否已翻手性(与法线反转配对)
         self._convert_uv = True  # 是否随约定同步转换 UV 空间(UE 的 V→1-V);默认开
+        self._hidden_history: list[list[str]] = []  # 仅记录检查器副本,不污染 Maya 全局隐藏历史
 
         # 1) 复制源网格。dup 放进 content(承载坐标约定变换),content 再放进 group
         #    (只负责把整体平移到远处隐藏)。两层职责分离:变换归 content,隐藏归 group。
@@ -109,6 +110,65 @@ class IsolatedMeshView:
             else:
                 cmds.select(clear=True)
 
+    def _view_selection(self) -> list[str]:
+        """返回当前选择中属于隔离副本的对象/组件。"""
+        cmds = _cmds()
+        dup_paths = cmds.ls(self.dup, long=True) or []
+        if not dup_paths:
+            return []
+        prefix = dup_paths[0]
+        return [
+            item
+            for item in (cmds.ls(selection=True, long=True, flatten=True) or [])
+            if item == prefix or item.startswith(prefix + ".") or item.startswith(prefix + "|")
+        ]
+
+    def activate_tool(self, tool: str) -> None:
+        """切换到 Maya 标准 Q/W/E/R 工具；实际编辑目标仍由当前选择决定。"""
+        contexts = {
+            "select": "selectSuperContext",
+            "move": "moveSuperContext",
+            "rotate": "RotateSuperContext",
+            "scale": "scaleSuperContext",
+        }
+        _cmds().setToolTo(contexts[tool])
+
+    def hide_selection(self) -> bool:
+        """隐藏隔离副本中的当前选择，不允许快捷键作用到源场景。"""
+        cmds = _cmds()
+        selected = self._view_selection()
+        if not selected:
+            return False
+        cmds.hide(selected)
+        self._hidden_history.append(selected)
+        cmds.refresh()
+        return True
+
+    def show_last_hidden(self) -> bool:
+        """恢复本视口最近一次隐藏，避免 Maya 全局 ShowLastHidden 影响源场景。"""
+        cmds = _cmds()
+        while self._hidden_history:
+            hidden = [item for item in self._hidden_history.pop() if cmds.objExists(item)]
+            if hidden:
+                cmds.showHidden(hidden)
+                cmds.refresh()
+                return True
+        return False
+
+    def frame_selection(self) -> None:
+        """用专属相机聚焦当前副本选择；无有效选择时聚焦完整副本。"""
+        cmds = _cmds()
+        selected = self._view_selection()
+        previous = cmds.ls(selection=True, long=True, flatten=True) or []
+        try:
+            cmds.select(selected or [self.dup], replace=True)
+            cmds.viewFit(self.camera, animate=False)
+        finally:
+            if previous:
+                cmds.select(previous, replace=True)
+            else:
+                cmds.select(clear=True)
+
     def set_source(self, source_mesh: str) -> None:
         """在原面板中换成另一 LOD 的隔离副本，不改变相机与坐标约定。
 
@@ -127,6 +187,7 @@ class IsolatedMeshView:
         cmds.xform(dup, matrix=source_matrix, objectSpace=True)
         self.source = source_mesh
         self.dup = dup
+        self._hidden_history.clear()
         try:
             cmds.delete(old_dup)
         except RuntimeError:

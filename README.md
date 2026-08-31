@@ -85,6 +85,11 @@ rule = channel_view_rule("colorSet1", "R", curve=Ramp.quadratic())
 Open a separate floating window that visualizes each channel in its **own isolated viewport** — the
 main Maya viewport and scene stay unchanged. Select a mesh, then:
 
+The isolated viewport supports Maya-style production hotkeys: `Q/W/E/R` select, move, rotate, and
+scale; `H` hides the selected object or components; `Shift+H` restores the inspector's most recent
+hidden selection; and `F` frames the selection. These operations affect only the temporary preview
+duplicate, never the source asset.
+
 ```python
 from fbx_inspector.ui import open_inspector
 open_inspector()          # or open_inspector("meshName")
@@ -270,6 +275,10 @@ rule = channel_view_rule("colorSet1", "R", curve=Ramp.quadratic())
 ### 检查窗口(独立 GUI)
 
 打开一个独立的浮动窗口,每个通道在它**自己的隔离视口**里显示——主 Maya 视口和场景保持不变。
+
+隔离视口支持 Maya 风格生产快捷键：`Q/W/E/R` 分别为选择、移动、旋转、缩放，`H` 隐藏所选对象
+或组件，`Shift+H` 恢复检查器最近一次隐藏，`F` 聚焦选择。所有操作只作用于临时预览副本，绝不修改
+源资产。
 选中网格后:
 
 ```python
