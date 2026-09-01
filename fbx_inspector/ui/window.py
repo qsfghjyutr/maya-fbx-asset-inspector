@@ -220,7 +220,7 @@ def _make_window_class():
             opts.addStretch(1)
             root.addLayout(opts)
 
-            # 坐标系:切换后隔离视口里的副本会摆成目标引擎导入后的姿态(如 UE 的 Z-up 左手)。
+            # 坐标系:模型姿态不变,目标引擎的轴方向/手性由视口坐标轴表达。
             coord_row = QtWidgets.QHBoxLayout()
             coord_row.addWidget(QtWidgets.QLabel("坐标系"))
             self._coord_combo = QtWidgets.QComboBox()
@@ -231,10 +231,14 @@ def _make_window_class():
             self._convert_uv = QtWidgets.QCheckBox("转换 UV 空间 (V→1-V)")
             self._convert_uv.setChecked(True)
             coord_row.addWidget(self._convert_uv)
+            self._show_origin_axes = QtWidgets.QCheckBox("显示原点坐标轴")
+            self._show_origin_axes.setChecked(True)
+            coord_row.addWidget(self._show_origin_axes)
             coord_row.addStretch(1)
             root.addLayout(coord_row)
             self._coord_combo.currentIndexChanged.connect(self._apply_coord)
             self._convert_uv.stateChanged.connect(self._apply_uv_convert)
+            self._show_origin_axes.stateChanged.connect(self._apply_origin_axes)
 
             for w in (self._ramp_combo, self._curve_combo):
                 w.currentIndexChanged.connect(self._reapply)
@@ -451,8 +455,7 @@ def _make_window_class():
             )
 
         def _apply_coord(self, *args) -> None:
-            # 副本姿态与 UV 空间都随坐标约定变化:UV 的 V 现按 UE 的 V→1-V 同步转换,故约定切换后
-            # 若当前正显示 UV 通道,需重跑 _apply 让预览/校验跟上;非 UV 通道的颜色仍与世界变换无关。
+            # UV 空间随坐标约定变化:UE 的 V→1-V 需要重跑当前 UV 通道的预览与校验。
             self._view.set_coord_convention(self._coord_combo.currentData())
             if self._current is not None and self._current[0] is SourceType.UV_SET:
                 self._apply()
@@ -461,6 +464,9 @@ def _make_window_class():
             self._view.set_convert_uv(self._convert_uv.isChecked())
             if self._current is not None and self._current[0] is SourceType.UV_SET:
                 self._apply()
+
+        def _apply_origin_axes(self, *args) -> None:
+            self._view.set_origin_axes_visible(self._show_origin_axes.isChecked())
 
         def _apply(self, *, update_report: bool = True) -> None:
             source, set_name, component = self._current

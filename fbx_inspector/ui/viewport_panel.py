@@ -15,6 +15,7 @@ GROUP_NAME = "__fbx_inspector_grp__"
 CONTENT_NAME = "__fbx_inspector_content__"
 DUP_NAME = "__fbx_inspector_dup__"
 CAM_NAME = "__fbx_inspector_cam__"
+AXES_NAME = "__fbx_inspector_origin_axes__"
 VIEW_SET_SUFFIX = "view"
 _OFFSET = 100000.0  # 把副本偏到远处,主相机常态下看不见
 # 相机的确定朝向:对齐 Maya 默认 persp 的 3/4 视角。固定朝向(而非新相机默认 -Z + viewFit)
@@ -60,17 +61,18 @@ class IsolatedMeshView:
         self.source = source_mesh
         self._alive = False
         self._coord_id = "maya"  # 当前坐标约定;默认 Maya(恒等,不变换)
-        self._mirrored = False   # content 变换当前是否已翻手性(与法线反转配对)
         self._convert_uv = True  # 是否随约定同步转换 UV 空间(UE 的 V→1-V);默认开
         self._hidden_history: list[list[str]] = []  # 仅记录检查器副本,不污染 Maya 全局隐藏历史
 
-        # 1) 复制源网格。dup 放进 content(承载坐标约定变换),content 再放进 group
-        #    (只负责把整体平移到远处隐藏)。两层职责分离:变换归 content,隐藏归 group。
+        # 1) 复制源网格。content 是副本与原点轴的稳定预览容器;group 只负责远距隐藏。
         dup = cmds.duplicate(source_mesh, name=DUP_NAME, returnRootsOnly=True)[0]
         self.dup = dup
         self.content = cmds.group(dup, name=CONTENT_NAME, world=True)
         self.group = cmds.group(self.content, name=GROUP_NAME, world=True)
         cmds.setAttr(f"{self.group}.translateX", _OFFSET)
+        self._origin_axes: list[str] = []
+        self._axis_length = self._origin_axis_length(source_mesh)
+        self._create_origin_axes()
 
         # 2) 专属相机 —— 给一个确定的 3/4 朝向,不再依赖"默认朝向 + viewFit"的不确定取景
         self.camera = cmds.camera(name=CAM_NAME)[0]
@@ -96,6 +98,63 @@ class IsolatedMeshView:
         self._fit_camera()
 
         self._alive = True
+
+    def _origin_axis_length(self, mesh: str) -> float:
+        """计算从原点向正负方向贯穿资产的对称坐标轴长度。"""
+        bb = _cmds().exactWorldBoundingBox(mesh)
+        extent = max(abs(value) for value in bb)
+        span = max(bb[3] - bb[0], bb[4] - bb[1], bb[5] - bb[2])
+        return max(1.0, extent + span * 0.1)
+
+    def _create_origin_axes(self) -> None:
+        """创建贯穿预览原点的 RGB 细线坐标轴。"""
+        cmds = _cmds()
+        self.axes_root = cmds.group(empty=True, name=AXES_NAME, parent=self.content)
+        colors = ((0.9, 0.18, 0.18), (0.2, 0.8, 0.3), (0.2, 0.42, 1.0))
+        for index, color in enumerate(colors):
+            curve = cmds.curve(
+                degree=1,
+                point=[(-1.0, 0.0, 0.0), (1.0, 0.0, 0.0)],
+                name=f"{AXES_NAME}_{'XYZ'[index]}",
+            )
+            cmds.parent(curve, self.axes_root, relative=True)
+            shape = (cmds.listRelatives(curve, shapes=True, fullPath=True) or [None])[0]
+            if shape:
+                # VP2 可能忽略 Reference 显示对象的绘制覆盖色；使用 Normal 显示模式，
+                # 并同时设置两套受支持的线框颜色属性。
+                cmds.setAttr(f"{shape}.overrideEnabled", 1)
+                cmds.setAttr(f"{shape}.overrideRGBColors", 1)
+                cmds.setAttr(f"{shape}.overrideColorRGB", *color)
+                cmds.setAttr(f"{shape}.overrideDisplayType", 0)
+                for node in (curve, shape):
+                    if cmds.attributeQuery("useObjectColor", node=node, exists=True):
+                        cmds.setAttr(f"{node}.useObjectColor", 2)
+                    if cmds.attributeQuery("wireColorRGB", node=node, exists=True):
+                        cmds.setAttr(f"{node}.wireColorRGB", *color)
+                if cmds.attributeQuery("lineWidth", node=shape, exists=True):
+                    cmds.setAttr(f"{shape}.lineWidth", 1.0)
+            # 锁定变换以免误操作，同时保留 Normal 显示模式下的 RGB 颜色。
+            for attr in ("translate", "rotate", "scale"):
+                for component in "XYZ":
+                    cmds.setAttr(f"{curve}.{attr}{component}", lock=True)
+            self._origin_axes.append(curve)
+        self._update_origin_axes(self.current_convention())
+
+    def _update_origin_axes(self, convention) -> None:
+        """将目标 X/Y/Z 轴嵌入 Maya 显示空间并更新线段两端。"""
+        cmds = _cmds()
+        from ..core.coord_convention import apply3x3
+
+        for index, curve in enumerate(self._origin_axes):
+            basis = tuple(1.0 if component == index else 0.0 for component in range(3))
+            direction = apply3x3(convention.viewport_basis, basis)
+            for cv, sign in ((0, -1.0), (1, 1.0)):
+                point = [sign * self._axis_length * value for value in direction]
+                cmds.xform(f"{curve}.cv[{cv}]", objectSpace=True, translation=point)
+
+    def set_origin_axes_visible(self, visible: bool) -> None:
+        """显示或隐藏彩色坐标轴，不影响受检网格。"""
+        _cmds().setAttr(f"{self.axes_root}.visibility", bool(visible))
 
     def _fit_camera(self) -> None:
         """让专属相机框住副本,期间不改动用户当前选择。"""
@@ -172,8 +231,7 @@ class IsolatedMeshView:
     def set_source(self, source_mesh: str) -> None:
         """在原面板中换成另一 LOD 的隔离副本，不改变相机与坐标约定。
 
-        relative=True 很重要：content 承载当前坐标系变换，新副本必须直接继承它。
-        Maya 默认的保持世界变换会给新副本写入抵消矩阵，看起来就像坐标系被重置。
+        relative=True 很重要：新副本需进入 content 的稳定局部预览空间,不能继承 group 的远距偏移。
         """
         cmds = _cmds()
         old_dup = self.dup
@@ -187,13 +245,13 @@ class IsolatedMeshView:
         cmds.xform(dup, matrix=source_matrix, objectSpace=True)
         self.source = source_mesh
         self.dup = dup
+        self._axis_length = self._origin_axis_length(source_mesh)
+        self._update_origin_axes(self.current_convention())
         self._hidden_history.clear()
         try:
             cmds.delete(old_dup)
         except RuntimeError:
             pass
-        if self.current_convention().is_mirror:
-            cmds.polyNormal(self.dup, normalMode=0, userNormalMode=0, ch=False)
         # 不调用 _fit_camera：LOD 切换应保留用户当前的 tumble / pan / zoom。
         cmds.refresh()
 
@@ -217,24 +275,18 @@ class IsolatedMeshView:
         return CONVENTIONS[self._coord_id]
 
     def set_coord_convention(self, convention_id: str) -> None:
-        """把 content 摆成目标坐标约定的姿态(如 UE 的 Z-up 左手),并补偿镜像。
+        """切换目标坐标解释并更新视口中的坐标轴。
 
-        只作用于窗口里的副本 content,**完全不触碰原始场景网格**;也不影响 ``show_channel``
-        按 face-vertex 索引写颜色的逻辑(世界变换与索引式顶点色读写互不相关)。
+        模型保持原姿态,只更新当前坐标约定和原点轴;**完全不触碰原始场景网格**。也不影响
+        ``show_channel`` 按 face-vertex 索引写颜色的逻辑。
         """
         cmds = _cmds()
-        from ..core.coord_convention import CONVENTIONS, to_maya_matrix44
+        from ..core.coord_convention import CONVENTIONS
 
         conv = CONVENTIONS[convention_id]
-        cmds.xform(self.content, matrix=to_maya_matrix44(conv.matrix), objectSpace=True)
-
-        # 换手性(镜像)会让面背朝外,反转一次副本法线/绕序补偿。
-        if conv.is_mirror != self._mirrored:
-            cmds.polyNormal(self.dup, normalMode=0, userNormalMode=0, ch=False)
-            self._mirrored = conv.is_mirror
-
         self._coord_id = convention_id
-        self._fit_camera()  # 姿态变了,重新取景
+        self._update_origin_axes(conv)
+        cmds.refresh()
 
     def set_convert_uv(self, enabled: bool) -> None:
         """设置是否随坐标约定同步转换 UV 空间(V→1-V)。只存标志;重着色由窗口驱动(见 window)。"""

@@ -65,7 +65,8 @@ def project_axes(view_rot: Matrix3, convention: CoordConvention) -> list[Project
     out: list[ProjectedAxis] = []
     for i in range(3):
         basis = tuple(1.0 if j == i else 0.0 for j in range(3))
-        world_dir = convention.apply(basis)  # type: ignore[arg-type]
+        # 将目标引擎坐标轴嵌入 Maya 固定的 Y-up 视口（目标引擎→Maya 显示空间）。
+        world_dir = apply3x3(convention.viewport_basis, basis)  # type: ignore[arg-type]
         cam = apply3x3(view_rot, world_dir)
         # Keep the original axis identity after transforming its direction.
         # Remapping both direction and label would visually cancel UE's mirror.

@@ -26,7 +26,8 @@ asset convention — no forking required.
 Version 0.1. The Maya-free layers are covered by the zero-dependency test suite. The Maya path
 includes mesh reads, color-set visualization, a floating PySide6 inspector with an isolated
 embedded viewport, preset-based batch inspection, Maya/UE coordinate previews, a handedness-aware
-axis indicator, and numeric vertex labels through a Viewport 2.0 DrawOverride. `modelPanel` and
+axis indicator, default-on colored origin axes, and numeric vertex labels through a Viewport 2.0
+DrawOverride. `modelPanel` and
 DrawOverride rendering still require final interactive verification in the Maya GUI. Vector-arrow
 visualization remains deferred.
 
@@ -100,6 +101,12 @@ numeric values to label the corresponding vertices and adjust their font size. R
 deduplicated; distinct values belonging to the same or coincident vertices use an explicit
 separator such as `1 | 0.01`, avoiding ambiguous overdraw. The window shows a temporary offset
 duplicate in its embedded panel and removes it when closed.
+
+The coordinate selector changes how the unchanged physical model is interpreted rather than
+transforming its preview geometry. Maya/UE up-axis and handedness differences are shown by the
+camera-following corner indicator and by thin red/green/blue X/Y/Z lines through the preview
+origin. The **Show origin axes** toggle is enabled by default. Engine-specific UV conversion
+(UE V→1-V) remains an independent, default-on option.
 
 LOD assets can be opened by selecting either one LOD mesh or their parent group. Name the mesh
 transforms with a shared prefix and an `_LOD<number>` or `-LOD<number>` suffix, for example
@@ -222,7 +229,8 @@ fork。
 
 当前版本为 v0.1。与 Maya 无关的各层由零依赖测试覆盖。Maya 链路现已包括网格读取、color set
 可视化、带隔离视口的 PySide6 浮动窗口、多预设一键检查、Maya/UE 坐标预览、能正确表达手性的
-方向指示器，以及基于 Viewport 2.0 DrawOverride 的顶点数值标签。`modelPanel` 与 DrawOverride
+方向指示器、默认开启的彩色原点坐标轴，以及基于 Viewport 2.0 DrawOverride 的顶点数值标签。
+`modelPanel` 与 DrawOverride
 的最终绘制效果仍需在 Maya GUI 中交互验证。向量箭头可视化仍留待后续版本。
 
 ### 环境要求
@@ -290,6 +298,10 @@ open_inspector()          # 或 open_inspector("网格名")
 偏移到远处的临时副本,关闭时自动移除。开启“显示数值”后,所选通道的数值会标在对应顶点旁,
 字号可调;重复值会去重,同一顶点或空间重合顶点的不同值用 `1 | 0.01` 这样的明确分隔符合并,
 避免文字重叠成 `10.01`。
+
+坐标系下拉框只改变对同一物理模型的坐标解释,不会变换预览网格。Maya/UE 的 Up 轴与手性差异由
+随相机转动的右上角方向指示器,以及贯穿预览原点的红/绿/蓝 X/Y/Z 细线表达。“显示原点坐标轴”
+默认开启。引擎特有的 UV 转换(UE V→1-V)仍是独立且默认开启的选项。
 
 LOD 资产既可以选中其中一个 LOD 网格打开,也可以选中包含全部 LOD 的父组。网格 transform 需使用
 相同前缀及 `_LOD<序号>` 或 `-LOD<序号>` 后缀,例如 `Tree_LOD0`、`Tree_LOD1`、

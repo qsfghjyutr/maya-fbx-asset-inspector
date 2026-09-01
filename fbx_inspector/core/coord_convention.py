@@ -1,7 +1,7 @@
 """坐标约定(与 Maya 无关)。
 
-维护"Maya 局部空间 → 目标引擎坐标约定"的变换矩阵,供 `ui/viewport_panel.py` 把隔离视口里的副本
-摆成目标引擎导入后的姿态,以及 `ui/axis_gizmo.py` 给坐标轴打标签。Maya 是 **Y-up、右手系**;不同
+维护"Maya 局部空间 → 目标引擎坐标约定"的数据变换,并派生目标引擎坐标轴在 Maya modelPanel
+中的显示基。预览模型本身不换轴;坐标矩阵只负责轴方向和数值解释。Maya 是 **Y-up、右手系**;不同
 引擎的 up 轴 / 手性不同,这里的 ``matrix`` 是相对 Maya 局部空间的 3x3 线性变换——单位矩阵表示
 "跟 Maya 一致,不变换"。
 
@@ -19,11 +19,8 @@ binormal 额外取一次反。项目若开 ``bForceFrontXAxis``(front=+X、关�
 ``Rot(-90,-90,0)``),净变换会不同——届时只需改 ``CONVENTIONS`` 这一处常量,不影响其余代码。
 
 关键的正确性提示:Maya(右手)→ UE(左手)是**换手性**(矩阵行列式为负,即镜像),不是纯旋转——
-纯旋转的行列式恒为 +1,做不出手性翻转。``CoordConvention.is_mirror`` 由行列式推出,保证矩阵本身
-与"是否需要翻转法线/绕序"这条业务判断永远自洽,不会因为手工维护两处标记而脱节。注意 UE 自己
-**不翻绕序**,而是靠左手系 front=CW 把镜像后的三角面渲成正面;副本渲染在 Maya 右手视口里,
-故 ``viewport_panel.set_coord_convention`` 需反转一次法线/绕序来补偿——这一步的**视觉**效果只能在
-Maya GUI 手测(见 ``scripts/maya_smoke_test.py`` 第 [7] 节末尾的手测清单)。
+纯旋转的行列式恒为 +1,做不出手性翻转。``CoordConvention.is_mirror`` 描述数据换轴是否镜像;
+预览不把该矩阵作用到模型,否则还需乘逆显示基并必然抵消,属于冗余操作。
 """
 
 from __future__ import annotations
@@ -63,6 +60,19 @@ def apply3x3(m: Matrix3, v: Vector3) -> Vector3:
 def determinant3x3(m: Matrix3) -> float:
     (a, b, c), (d, e, f), (g, h, i) = m
     return a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g)
+
+
+def inverse3x3(m: Matrix3) -> Matrix3:
+    """返回非奇异 3x3 坐标基矩阵的逆矩阵。"""
+    (a, b, c), (d, e, f), (g, h, i) = m
+    det = determinant3x3(m)
+    if abs(det) < 1e-12:
+        raise ValueError("coordinate convention matrix must be invertible")
+    return (
+        ((e * i - f * h) / det, (c * h - b * i) / det, (b * f - c * e) / det),
+        ((f * g - d * i) / det, (a * i - c * g) / det, (c * d - a * f) / det),
+        ((d * h - e * g) / det, (b * g - a * h) / det, (a * e - b * d) / det),
+    )
 
 
 def to_maya_matrix44(m: Matrix3) -> list[float]:
@@ -111,6 +121,11 @@ class CoordConvention:
 
     def apply(self, v: Vector3) -> Vector3:
         return apply3x3(self.matrix, v)
+
+    @property
+    def viewport_basis(self) -> Matrix3:
+        """目标引擎坐标轴嵌入 Maya 固定 Y-up 视口后的显示基。"""
+        return inverse3x3(self.matrix)
 
 
 CONVENTIONS: dict[str, CoordConvention] = {
@@ -184,6 +199,7 @@ __all__ = [
     "axis_label_map",
     "determinant3x3",
     "flip_uv_v",
+    "inverse3x3",
     "to_maya_matrix44",
     "view_rotation_from_matrix",
 ]

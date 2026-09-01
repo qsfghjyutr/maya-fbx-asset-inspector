@@ -166,7 +166,6 @@ def main() -> int:
     print("\n[7] 坐标约定切换 + 方向指示器投影(无头,不建 modelPanel)")
     from fbx_inspector.core.coord_convention import (
         CONVENTIONS,
-        to_maya_matrix44,
         view_rotation_from_matrix,
     )
     from fbx_inspector.ui.axis_indicator import project_axes
@@ -178,29 +177,21 @@ def main() -> int:
     ggroup = cmds.group(content, name="__smoke_ggroup__", world=True)
     cmds.setAttr(f"{ggroup}.translateX", OFFSET)
 
-    # 切到 UE:content 上矩阵,验证 bbox 的 Y/Z 范围互换
+    # 切到 UE 只改变坐标解释与 gizmo;预览模型本身保持 Maya 原姿态。
     bb_maya = cmds.exactWorldBoundingBox(gdup)
     y_span_maya = bb_maya[4] - bb_maya[1]
     z_span_maya = bb_maya[5] - bb_maya[2]
 
-    # 逐顶点世界坐标:切换前记一个非原点顶点,验证净变换正是 UE 的 (x,z,y)。
-    # ggroup 的 X 偏移对切换前后相同(且只作用于 X),做差即抵消,故 Y/Z 直接可比。
+    # 模型不做冗余的“数据换轴 + 逆显示补偿”。
     p_before = cmds.xform(f"{gdup}.vtx[5]", query=True, worldSpace=True, translation=True)
 
     faces_before = cmds.polyEvaluate(gdup, face=True)
-    cmds.xform(content, matrix=to_maya_matrix44(CONVENTIONS["ue"].matrix), objectSpace=True)
-    # UE 自己**不翻绕序**(靠左手系 front=CW 渲正面);副本在 Maya 右手视口,故镜像时反转一次
-    # 法线补偿背面朝外。此举的**视觉**效果只能 GUI 手测(见本节末手测清单),这里仅确认拓扑不变。
-    if CONVENTIONS["ue"].is_mirror:
-        cmds.polyNormal(gdup, normalMode=0, userNormalMode=0, ch=False)
     faces_after = cmds.polyEvaluate(gdup, face=True)
 
     p_after = cmds.xform(f"{gdup}.vtx[5]", query=True, worldSpace=True, translation=True)
     check(
-        abs(p_after[0] - p_before[0]) < 1e-3      # X 不变
-        and abs(p_after[1] - p_before[2]) < 1e-3  # UE_Y = Maya_Z
-        and abs(p_after[2] - p_before[1]) < 1e-3,  # UE_Z = Maya_Y
-        "逐顶点世界坐标按 UE 净变换 (x,z,y) 互换: "
+        all(abs(a - b) < 1e-3 for a, b in zip(p_after, p_before)),
+        "切换坐标解释后模型保持原显示位置: "
         f"{[round(v, 3) for v in p_before]} → {[round(v, 3) for v in p_after]}",
     )
 
@@ -208,10 +199,10 @@ def main() -> int:
     y_span_ue = bb_ue[4] - bb_ue[1]
     z_span_ue = bb_ue[5] - bb_ue[2]
     check(
-        abs(y_span_ue - z_span_maya) < 1e-3 and abs(z_span_ue - y_span_maya) < 1e-3,
-        "切到 UE 后副本 bbox 的 Y/Z 范围互换(Z-up 生效,与 UE 净变换一致)",
+        abs(y_span_ue - y_span_maya) < 1e-3 and abs(z_span_ue - z_span_maya) < 1e-3,
+        "切到 UE 后副本 bbox 保持不变(坐标切换不变换预览网格)",
     )
-    check(faces_after == faces_before, "坐标变换 + 法线反转不改拓扑(面数不变)")
+    check(faces_after == faces_before, "坐标预览不改拓扑(面数不变)")
 
     # 原物体完全不受这一节影响
     check(
@@ -237,14 +228,14 @@ def main() -> int:
     cmds.delete(cam)
 
     # —— GUI 手测清单(无头测不到"渲染像素",只能进 Maya GUI 肉眼核对)——
-    # 无头可验证的部分:位置净变换 = UE 的 (x,z,y) 数值、拓扑不变、gizmo 投影出三根轴。
-    # 关于"模型立起来":Maya 视口固定 Y-up,把 Z-up 的 UE 坐标塞进来显示,水平面会呈竖直——
-    # 这是**预期现象、不是 bug**(本工具以数值正确为先,不追求副本姿态与 UE 视口逐帧一致)。
+    # 无头可验证的部分:模型位置不变、拓扑不变、gizmo 投影三根目标坐标轴。
     print(
         "\n[7-GUI] 需在 Maya GUI 手测(open_inspector → 切 UE):\n"
-        "  - 副本坐标值已转为 Z-up(与 UE 一致);因视口 Y-up,水平面会显示为‘立起来’,属预期;\n"
-        "  - 不出现 inside-out / 黑面(polyNormal 补偿到位);\n"
+        "  - 切 UE 后模型保持直立,不因 Maya 视口固定 Y-up 而倾倒;\n"
+        "  - 不出现 inside-out / 黑面;\n"
         "  - 右上角 gizmo 显示 Z 朝上(蓝),随 tumble 转动;\n"
+        "  - 默认显示贯穿原点的 RGB 三轴细线,开关可即时隐藏/恢复;\n"
+        "  - 原点轴与右上角 gizmo 在 Maya/UE 切换时方向一致;\n"
         "  - 切回 Maya 约定后模型/gizmo 复原,面数不变。"
     )
 

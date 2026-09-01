@@ -40,6 +40,13 @@ def test_apply3x3_matches_manual_dot():
     assert apply3x3(m, (1.0, 1.0, 1.0)) == (2.0, 3.0, 4.0)
 
 
+def test_ue_viewport_basis_embeds_engine_axes_in_maya_without_moving_model():
+    ue = CONVENTIONS["ue"]
+    # UE→Maya 显示基是 Maya→UE 数据变换的逆矩阵。
+    assert ue.viewport_basis == ue.matrix
+    assert determinant3x3(ue.viewport_basis) < 0
+
+
 def test_axis_label_map_marks_up_axis():
     labels = axis_label_map(CONVENTIONS["ue"])
     # Maya 局部 Y(下标 1)在 UE 约定下落到 up 轴 Z 上。
