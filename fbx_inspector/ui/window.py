@@ -205,6 +205,10 @@ def _make_window_class():
             opts.addWidget(self._curve_combo)
             self._show_values = QtWidgets.QCheckBox("显示数值")
             opts.addWidget(self._show_values)
+            self._label_occlusion = QtWidgets.QCheckBox("标签遮挡剔除")
+            self._label_occlusion.setChecked(True)
+            self._label_occlusion.setToolTip("仅绘制当前相机可见的顶点数值标签")
+            opts.addWidget(self._label_occlusion)
             opts.addWidget(QtWidgets.QLabel("颜色"))
             self._value_color = QtGui.QColor.fromRgbF(*DEFAULT_LABEL_COLOR)
             self._color_button = QtWidgets.QPushButton()
@@ -244,6 +248,7 @@ def _make_window_class():
                 w.currentIndexChanged.connect(self._reapply)
             self._normalize.stateChanged.connect(self._reapply)
             self._show_values.stateChanged.connect(self._reapply)
+            self._label_occlusion.stateChanged.connect(self._reapply)
             self._color_button.clicked.connect(self._choose_value_color)
             self._font_size.valueChanged.connect(self._reapply)
 
@@ -421,6 +426,7 @@ def _make_window_class():
                             show_values=self._show_values.isChecked(),
                             font_size=self._font_size.value(),
                             value_color=self._value_color.getRgbF(),
+                            label_occlusion_culling=self._label_occlusion.isChecked(),
                         )
                     )
                 except Exception as exc:  # 单条规则失败不阻断同一预设中的其余规则
@@ -484,6 +490,7 @@ def _make_window_class():
                 show_values=self._show_values.isChecked(),
                 font_size=self._font_size.value(),
                 value_color=self._value_color.getRgbF(),
+                label_occlusion_culling=self._label_occlusion.isChecked(),
             )
             self._update_range_label(result.viz_info)
             if update_report:

@@ -44,6 +44,11 @@ def test_channel_rule_runs_validate_only():
     assert result.visualized is False  # validate_only 不触发可视化
 
 
+def test_channel_rule_range_check_is_opt_in():
+    assert channel_view_rule("colorSet1", "R").validators == []
+    assert len(channel_view_rule("colorSet1", "R", check_range=True).validators) == 1
+
+
 def test_curved_rule_uses_distinct_suffix():
     from fbx_inspector.core.remap import Ramp
 

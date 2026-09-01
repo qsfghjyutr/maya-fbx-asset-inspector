@@ -15,7 +15,7 @@ def test_color_channel_builds_scalar_rule():
     assert rule.decoder.component == "R"
     assert rule.channel_roles["in"].name == "colorSet1"
     assert rule.visualizer.set_suffix == "view"
-    assert len(rule.validators) == 1  # RangeCheck
+    assert rule.validators == []
 
 
 def test_default_ramp_is_grayscale():
@@ -28,6 +28,7 @@ def test_uv_channel_builds_scalar_rule():
     assert rule.decoder.component == "U"
     assert rule.channel_roles["in"].source is SourceType.UV_SET
     assert rule.visualizer.curve is not None
+    assert rule.validators == []
 
 
 def test_invalid_component_rejected():
@@ -42,6 +43,10 @@ def test_invalid_component_rejected():
         raise AssertionError(f"非法分量 {comp} 应报 ValueError")
 
 
-def test_no_range_check_when_disabled():
-    rule = scalar_rule_for(SourceType.COLOR_SET, "cs", "G", check_range=False)
-    assert rule.validators == []
+def test_range_check_when_enabled_explicitly():
+    for source, name, component in [
+        (SourceType.COLOR_SET, "cs", "G"),
+        (SourceType.UV_SET, "uv", "V"),
+    ]:
+        rule = scalar_rule_for(source, name, component, check_range=True)
+        assert len(rule.validators) == 1

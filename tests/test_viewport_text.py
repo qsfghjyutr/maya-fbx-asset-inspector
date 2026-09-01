@@ -38,3 +38,8 @@ def test_label_color_has_readable_default_and_is_clamped():
     assert DEFAULT_LABEL_COLOR == (230 / 255, 81 / 255, 0.0, 1.0)
     visualizer = ViewportTextVisualizer(color=(2.0, -1.0, 0.5, 1.0))
     assert visualizer.color == (1.0, 0.0, 0.5, 1.0)
+
+
+def test_label_occlusion_culling_defaults_on_and_can_be_disabled():
+    assert ViewportTextVisualizer().occlusion_culling is True
+    assert ViewportTextVisualizer(occlusion_culling=False).occlusion_culling is False

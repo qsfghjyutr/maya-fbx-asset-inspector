@@ -2,7 +2,7 @@
 
 把"某个 color set / UV set 的某个分量"落成一条标量查看规则,供检查窗口与单测共用。
 窗口每选一个通道就用它现造一条 Rule:解码器取该分量、可视化器按当前色带/曲线着色、
-再附带范围校验。可视化器的写入目标(场景网格 vs 窗口里的副本)由调用方决定——窗口会把它
+可按用户配置附带范围校验。可视化器的写入目标(场景网格 vs 窗口里的副本)由调用方决定——窗口会把它
 apply 到隔离面板中的临时副本上。
 """
 
@@ -24,12 +24,13 @@ def scalar_rule_for(
     ramp: str = "grayscale",
     curve: Ramp | None = None,
     normalize: bool = True,
-    check_range: bool = True,
+    check_range: bool = False,
     set_suffix: str = "view",
 ) -> Rule:
     """构造"查看 ``set_name`` 的 ``component`` 分量"的标量规则。
 
     ``component`` 须是该来源类型的合法分量(color set 为 R/G/B/A,UV set 为 U/V)。
+    所有通道默认都不限制值域；用户可用 ``check_range=True`` 显式启用 [0,1] 校验。
     ``set_suffix`` 决定写入哪个显示 color set;窗口用固定后缀,使切换通道时复用同一个
     显示集(一次只看一路)。
     """

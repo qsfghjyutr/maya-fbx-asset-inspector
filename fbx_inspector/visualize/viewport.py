@@ -66,12 +66,14 @@ class ViewportTextVisualizer(Visualizer):
 
     def __init__(self, *, font_size: int = 12, precision: int = 3,
                  color: tuple[float, float, float, float] = DEFAULT_LABEL_COLOR,
+                 occlusion_culling: bool = True,
                  parent: str | None = None, node_name: str = NODE_NAME) -> None:
         self.font_size = max(1, int(font_size))
         self.precision = max(0, int(precision))
         if len(color) != 4:
             raise ValueError("数值标签颜色必须是 RGBA 四元组")
         self.color = tuple(max(0.0, min(1.0, float(c))) for c in color)
+        self.occlusion_culling = bool(occlusion_culling)
         self.parent = parent
         self.node_name = node_name
 
@@ -105,7 +107,11 @@ class ViewportTextVisualizer(Visualizer):
         transform = cmds.rename(transform, self.node_name)
         if self.parent:
             cmds.parent(transform, self.parent, relative=True)
-        payload = {"labels": payload, "color": self.color}
+        payload = {
+            "labels": payload,
+            "color": self.color,
+            "occlusionCulling": self.occlusion_culling,
+        }
         cmds.setAttr(f"{shape}.labelsJson", json.dumps(payload), type="string")
         cmds.setAttr(f"{shape}.fontSize", self.font_size)
         return None

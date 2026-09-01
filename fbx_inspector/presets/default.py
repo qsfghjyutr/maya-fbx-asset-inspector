@@ -8,14 +8,14 @@ from ..decode.builtin import ScalarFromComponent
 from ..rules.profile import Profile, Rule
 # 如需启用下方 UV 集数量限制示例，请取消下一行及 Profile 参数的注释。
 # from ..rules.preflight import UVSetCountCheck
-from ..validate.builtin import RangeCheck
+
 from ..visualize.colorset import ColorSetRemapVisualizer
 
 DEFAULT_PROFILE_ID = "default"
 
 
 def default_profile() -> Profile:
-    """检查 colorSet1 的 RGBA，并为每个分量生成独立灰度可视化。"""
+    """可视化 colorSet1 的 RGBA；不对通道值域作默认假设。"""
     rules = []
     for component in ("R", "G", "B", "A"):
         rules.append(
@@ -28,13 +28,12 @@ def default_profile() -> Profile:
                     normalize=False,
                     set_suffix=f"default_{component}",
                 ),
-                validators=[RangeCheck(0.0, 1.0)],
             )
         )
     return Profile(
         id=DEFAULT_PROFILE_ID,
         name="默认",
-        description="检查 colorSet1 的 R/G/B/A 范围，并生成四套灰度可视化。",
+        description="生成 colorSet1 的四套灰度可视化；值域校验由用户规则按需配置。",
         rules=rules,
         # 默认预设不限制 UV 集数量；用户预设可启用下面的统一要求：
         # preflight_checks=[UVSetCountCheck(expected=2)],

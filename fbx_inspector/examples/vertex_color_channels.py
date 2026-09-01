@@ -42,13 +42,13 @@ def channel_view_rule(
     ramp: str = "grayscale",
     curve: Ramp | None = None,
     normalize: bool = False,
-    check_range: bool = True,
+    check_range: bool = False,
 ) -> Rule:
     """构造"查看某个 color set 的某个分量"的规则。
 
     每条规则写入名为 ``{prefix}_{component}`` 的独立 color set,互不覆盖。
     ``normalize=False`` 忠实显示原始 0-1;``curve`` 可叠加 Ramp 塑形;
-    ``check_range=True`` 附带 [0,1] 范围校验(超范围通常意味着数据异常)。
+    默认不限制值域；``check_range=True`` 时附带 [0,1] 范围校验。
     """
     if component not in CHANNELS:
         raise ValueError(f"分量须为 {CHANNELS} 之一,收到 {component!r}")

@@ -120,8 +120,9 @@ The **Inspection preset** selector first runs a Profile's preflight checks, then
 and combines the results into one report. Preflight checks apply to every discovered LOD by
 default; a Profile may override a check by ID for specific LOD levels. Any preflight error stops
 visualization. The built-in **Default** preset intentionally has no UV-set-count restriction so
-new users can try the visualization features immediately. It checks `colorSet1` R/G/B/A against
-[0, 1] and creates four grayscale display color sets. Its source includes commented examples for
+new users can try the visualization features immediately. It creates four grayscale displays for
+`colorSet1` without enforcing a value range. Any channel range check must be explicitly configured
+by a user rule, for example with `RangeCheck(0.0, 1.0)`. Its source includes commented examples for
 a shared UV-set count and an LOD-specific override. After batch execution, the channel that was
 viewed manually is refreshed and restored instead of leaving the viewport on the preset's last
 rule.
@@ -311,8 +312,8 @@ LOD 资产既可以选中其中一个 LOD 网格打开,也可以选中包含全�
 
 “检查预设”会先执行 Profile 的前置检查,通过后再执行全部 Rule,并把结果合并成一份报告。前置检查
 默认对发现的全部 LOD 生效;Profile 可以按检查 id 为指定 LOD 覆盖要求。任一前置检查报错都会停止
-后续可视化。内置“默认”预设不启用 UV 集数量限制,方便首次使用者直接体验全部可视化功能;它仍会
-检查 `colorSet1` 的 R/G/B/A 是否位于 [0,1],同时生成四套灰度显示 color set。默认预设源码中提供了
+后续可视化。内置“默认”预设不启用 UV 集数量限制,方便首次使用者直接体验全部可视化功能;它只为
+`colorSet1` 生成四套灰度显示,不强制任何通道值域。用户可在规则中按需配置 `RangeCheck(0.0, 1.0)`。默认预设源码中提供了
 统一 UV 集数量和 LOD 分级覆盖的注释示例。批量执行结束后会自动刷新并恢复执行前手动查看的通道。
 
 ### 你自己的规则(系统更新不覆盖)
