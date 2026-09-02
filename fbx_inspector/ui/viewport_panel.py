@@ -11,6 +11,9 @@
 
 from __future__ import annotations
 
+import json
+import re
+
 GROUP_NAME = "__fbx_inspector_grp__"
 CONTENT_NAME = "__fbx_inspector_content__"
 DUP_NAME = "__fbx_inspector_dup__"
@@ -62,7 +65,7 @@ class IsolatedMeshView:
         self._alive = False
         self._coord_id = "maya"  # 当前坐标约定;默认 Maya(恒等,不变换)
         self._convert_uv = True  # 是否随约定同步转换 UV 空间(UE 的 V→1-V);默认开
-        self._hidden_history: list[list[str]] = []  # 仅记录检查器副本,不污染 Maya 全局隐藏历史
+        self._hidden_history: list[tuple[list[str], set[int]]] = []  # 选择与对应顶点 ID
 
         # 1) 复制源网格。content 是副本与原点轴的稳定预览容器;group 只负责远距隐藏。
         dup = cmds.duplicate(source_mesh, name=DUP_NAME, returnRootsOnly=True)[0]
@@ -192,14 +195,46 @@ class IsolatedMeshView:
         }
         _cmds().setToolTo(contexts[tool])
 
+    def _selection_vertex_ids(self, selected: list[str]) -> set[int]:
+        """把顶点/边/面选择转换成标签使用的几何顶点 ID。"""
+        cmds = _cmds()
+        converted = cmds.polyListComponentConversion(selected, toVertex=True) or []
+        vertices = cmds.ls(converted, flatten=True, long=True) or []
+        result = set()
+        for component in vertices:
+            match = re.search(r"\.vtx\[(\d+)\]$", component)
+            if match:
+                result.add(int(match.group(1)))
+        return result
+
+    def _sync_hidden_label_vertices(self) -> None:
+        """把检查器自己的组件隐藏历史同步到当前数值标签节点。"""
+        cmds = _cmds()
+        hidden_ids = sorted({vertex_id for _, ids in self._hidden_history for vertex_id in ids})
+        shapes = cmds.listRelatives(
+            self.dup, allDescendents=True, type="fbxInspectorValueLabels", fullPath=True
+        ) or []
+        for shape in shapes:
+            attr = f"{shape}.labelsJson"
+            try:
+                payload = json.loads(cmds.getAttr(attr) or "{}")
+            except (TypeError, ValueError):
+                continue
+            if not isinstance(payload, dict):
+                payload = {"labels": payload}
+            payload["hiddenVertices"] = hidden_ids
+            cmds.setAttr(attr, json.dumps(payload), type="string")
+
     def hide_selection(self) -> bool:
         """隐藏隔离副本中的当前选择，不允许快捷键作用到源场景。"""
         cmds = _cmds()
         selected = self._view_selection()
         if not selected:
             return False
+        vertex_ids = self._selection_vertex_ids(selected)
         cmds.hide(selected)
-        self._hidden_history.append(selected)
+        self._hidden_history.append((selected, vertex_ids))
+        self._sync_hidden_label_vertices()
         cmds.refresh()
         return True
 
@@ -207,11 +242,14 @@ class IsolatedMeshView:
         """恢复本视口最近一次隐藏，避免 Maya 全局 ShowLastHidden 影响源场景。"""
         cmds = _cmds()
         while self._hidden_history:
-            hidden = [item for item in self._hidden_history.pop() if cmds.objExists(item)]
+            selection, _ = self._hidden_history.pop()
+            hidden = [item for item in selection if cmds.objExists(item)]
             if hidden:
                 cmds.showHidden(hidden)
+                self._sync_hidden_label_vertices()
                 cmds.refresh()
                 return True
+        self._sync_hidden_label_vertices()
         return False
 
     def frame_selection(self) -> None:
@@ -332,6 +370,7 @@ class IsolatedMeshView:
             labels.apply(dup_view, decoded, ctx)
         else:
             labels.clear(dup_view, ctx)
+        self._sync_hidden_label_vertices()
         cmds.refresh()
 
         result = RuleResult(

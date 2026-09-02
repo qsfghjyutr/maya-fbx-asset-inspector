@@ -83,11 +83,13 @@ def _visible_labels(labels, obj_path, camera_path):
         return labels
     try:
         mesh = om.MFnMesh(mesh_path)
+
         eye = om.MFnCamera(camera_path).eyePoint(om.MSpace.kWorld)
         matrix = mesh_path.inclusiveMatrix()
         accel = mesh.autoUniformGridParams()
         visible = []
         for item in labels:
+
             point = item.get("p", (0.0, 0.0, 0.0))
             target = om.MPoint(float(point[0]), float(point[1]), float(point[2])) * matrix
             ray = target - eye
@@ -137,6 +139,13 @@ class ValueLabelDrawOverride(omr.MPxDrawOverride):
             payload = json.loads(raw) if raw else []
             if isinstance(payload, dict):
                 data.labels = payload.get("labels", [])
+                hidden_vertices = {int(vertex) for vertex in payload.get("hiddenVertices", [])}
+                if hidden_vertices:
+                    data.labels = [
+                        item for item in data.labels
+                        if not item.get("vertices")
+                        or not all(int(vertex) in hidden_vertices for vertex in item["vertices"])
+                    ]
                 color = payload.get("color", DEFAULT_LABEL_COLOR)
                 data.color = tuple(float(c) for c in color[:4])
                 data.occlusion_culling = bool(payload.get("occlusionCulling", True))

@@ -48,13 +48,18 @@ def build_label_payload(
             continue
         position = tuple(float(v) for v in positions[vertex_id])
         key = tuple(round(v, position_precision) for v in position)
-        item = grouped.setdefault(key, {"p": position, "values": []})
+        item = grouped.setdefault(key, {"p": position, "values": [], "vertices": []})
         values = item["values"]
+        item["vertices"].append(vertex_id)
         for value in text.split(" | "):
             if value not in values:
                 values.append(value)
     return [
-        {"p": item["p"], "text": " | ".join(item["values"])}
+        {
+            "p": item["p"],
+            "text": " | ".join(item["values"]),
+            "vertices": item["vertices"],
+        }
         for item in grouped.values()
     ]
 

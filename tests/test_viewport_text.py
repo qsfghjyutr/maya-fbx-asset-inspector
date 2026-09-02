@@ -30,8 +30,14 @@ def test_coincident_geometry_vertices_share_one_unambiguous_label():
     labels = {0: "1", 1: "0.01", 2: "1"}
     positions = [(2.0, 3.0, 4.0), (2.0, 3.0, 4.0), (2.0, 3.0, 4.0)]
     assert build_label_payload(labels, positions) == [
-        {"p": (2.0, 3.0, 4.0), "text": "1 | 0.01"}
+        {"p": (2.0, 3.0, 4.0), "text": "1 | 0.01", "vertices": [0, 1, 2]}
     ]
+
+
+def test_label_payload_keeps_source_vertex_ids_for_dynamic_visibility():
+    labels = {4: "0.2", 9: "0.8"}
+    positions = [(0.0, 0.0, 0.0)] * 10
+    assert build_label_payload(labels, positions)[0]["vertices"] == [4, 9]
 
 
 def test_label_color_has_readable_default_and_is_clamped():
