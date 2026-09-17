@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import stat
 import sys
 
 # 仓库根目录 = 本文件所在目录。自动推导,绝不硬编码。
@@ -55,6 +56,14 @@ _LABEL_NODE_TYPE = "fbxInspectorValueLabels"
 def _ensure_on_path() -> None:
     if _REPO not in sys.path:
         sys.path.insert(0, _REPO)
+
+
+def _force_remove(path: str) -> None:
+    """删除文件;先清除只读属性,避免 P4V 等版本控制留下的只读位导致删除失败(Windows)。"""
+    if not os.path.exists(path):
+        return
+    os.chmod(path, stat.S_IWRITE)
+    os.remove(path)
 
 
 def _usersetup_path() -> str:
@@ -140,9 +149,10 @@ def _install_plugin_bridge() -> str:
     os.makedirs(os.path.dirname(target), exist_ok=True)
     _unload_inspector_plugins()
     legacy_bridge = os.path.join(os.path.dirname(target), "fbx_inspector_viewport.py")
-    if os.path.exists(legacy_bridge):
-        os.remove(legacy_bridge)
-    shutil.copy2(_PLUGIN_LOADER, target)
+    _force_remove(legacy_bridge)
+    # 先清掉旧副本(可能带 P4 传染来的只读位),再用 copyfile 只复制内容、不继承源文件权限。
+    _force_remove(target)
+    shutil.copyfile(_PLUGIN_LOADER, target)
     # 自动加载可能早于 userSetup.py,故把仓库位置写入桥的已安装副本。这里只写路径配置,
     # Viewport 功能实现仍留在仓库,不会被复制。
     with open(target, "a", encoding="utf-8") as f:
@@ -238,8 +248,7 @@ def uninstall() -> None:
         cmds.pluginInfo(_PLUGIN_ID, edit=True, autoload=False)
     _unload_inspector_plugins()
     target = _plugin_target()
-    if os.path.exists(target):
-        os.remove(target)
+    _force_remove(target)
     print("[FBX Inspector] 已卸载工具架按钮、启动路径与通用 Maya 插件加载桥。")
 
 
