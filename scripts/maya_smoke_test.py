@@ -227,6 +227,56 @@ def main() -> int:
     check(labels == {"X", "Y", "Z"}, f"三轴标签为 X/Y/Z(实测 {labels})")
     cmds.delete(cam)
 
+    print("\n[8] Z-up 世界坐标系兼容(切 cmds.upAxis 后按检测值构造约定)")
+    from fbx_inspector.core.coord_convention import IDENTITY, conventions_for
+
+    prev_up = cmds.upAxis(query=True, axis=True)
+    try:
+        cmds.upAxis(axis="z", rotateView=False)
+        detected = cmds.upAxis(query=True, axis=True)
+        check(detected == "z", f"cmds.upAxis 切到 Z-up(实测 {detected})")
+
+        z_convs = conventions_for(detected)
+        maya_z = z_convs["maya"]
+        ue_z = z_convs["ue"]
+        check(maya_z.up_axis == "Z" and maya_z.matrix == IDENTITY,
+              "Z-up 下 maya 参照约定 up=Z 且恒等不变换")
+        check(
+            ue_z.matrix == ((1.0, 0.0, 0.0), (0.0, -1.0, 0.0), (0.0, 0.0, 1.0)),
+            f"Z-up 下 UE 变换退化为仅手性翻转 diag(1,-1,1)(实测 {ue_z.matrix})",
+        )
+
+        # 用与隔离视口 Z-up 相机相同的世界朝向矩阵驱动 gizmo 投影,断言"上"方向轴严格朝屏幕正上方。
+        from fbx_inspector.core.coord_convention import orbit_camera_world_matrix
+
+        zcam = cmds.camera(name="__smoke_zcam__")[0]
+        cmds.xform(zcam, worldSpace=True, matrix=orbit_camera_world_matrix("z"))
+        zm16 = cmds.xform(zcam, query=True, worldSpace=True, matrix=True)
+        zvr = view_rotation_from_matrix(zm16)
+
+        maya_axes = project_axes(zvr, maya_z)
+        up_axis_proj = next(a for a in maya_axes if "Up" in a.label)
+        check(up_axis_proj.label.startswith("Z"),
+              f"Z-up maya gizmo:标注 (Up) 的是 Z 轴(实测 {up_axis_proj.label})")
+        check(
+            up_axis_proj.dy > 0.5 and abs(up_axis_proj.dx) < 0.05,
+            f"Z-up maya gizmo:Z(Up)投影到屏幕正上方(dx={round(up_axis_proj.dx, 3)}, "
+            f"dy={round(up_axis_proj.dy, 3)})",
+        )
+
+        # UE 约定在 Z-up 下的"上"应与 maya 一致(退化只翻手性,不动 Z 轴)。
+        ue_axes = project_axes(zvr, ue_z)
+        ue_z_proj = next(a for a in ue_axes if a.label.startswith("Z"))
+        check(
+            ue_z_proj.dy > 0.5 and abs(ue_z_proj.dx) < 0.05,
+            f"Z-up UE gizmo:Z(Up)仍朝屏幕正上方,不歪斜(dx={round(ue_z_proj.dx, 3)}, "
+            f"dy={round(ue_z_proj.dy, 3)})",
+        )
+        cmds.delete(zcam)
+    finally:
+        # 恢复原上方向轴,避免污染后续(以及冒烟测试结束时的场景状态)。
+        cmds.upAxis(axis=prev_up, rotateView=False)
+
     # —— GUI 手测清单(无头测不到"渲染像素",只能进 Maya GUI 肉眼核对)——
     # 无头可验证的部分:模型位置不变、拓扑不变、gizmo 投影三根目标坐标轴。
     print(

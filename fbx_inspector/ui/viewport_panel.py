@@ -22,8 +22,10 @@ AXES_NAME = "__fbx_inspector_origin_axes__"
 VIEW_SET_SUFFIX = "view"
 _OFFSET = 100000.0  # 把副本偏到远处,主相机常态下看不见
 # 相机的确定朝向:对齐 Maya 默认 persp 的 3/4 视角。固定朝向(而非新相机默认 -Z + viewFit)
-# 可避免取景方向不确定造成的"Z 反了"错觉,配合大坐标轴 gizmo 一起消除方位歧义。
-_CAM_ROT = (-27.938, 45.0, 0.0)
+# 可避免取景方向不确定造成的"轴反了"错觉,配合大坐标轴 gizmo 一起消除方位歧义。
+# Y-up 沿用 Maya 默认 persp 的欧拉角;Z-up 改用 orbit_camera_world_matrix 直接拼世界朝向矩阵
+# (无 roll,保证世界上方向轴投影到屏幕正上方),欧拉角在 Z-up 下容易因 rotateOrder 引入滚转。
+_CAM_ROT_Y = (-27.938, 45.0, 0.0)
 
 
 def _cmds():
@@ -60,12 +62,16 @@ class IsolatedMeshView:
 
     def __init__(self, source_mesh: str) -> None:
         cmds = _cmds()
+        from ..core.coord_convention import conventions_for
 
         self.source = source_mesh
         self._alive = False
         self._coord_id = "maya"  # 当前坐标约定;默认 Maya(恒等,不变换)
         self._convert_uv = True  # 是否随约定同步转换 UV 空间(UE 的 V→1-V);默认开
         self._hidden_history: list[tuple[list[str], set[int]]] = []  # 选择与对应顶点 ID
+        # 打开检查器时读一次 Maya 世界上方向轴(Y-up / Z-up),据此构造约定集与相机取景。
+        self._maya_up = (cmds.upAxis(query=True, axis=True) or "y").lower()
+        self._conventions = conventions_for(self._maya_up)
 
         # 1) 复制源网格。content 是副本与原点轴的稳定预览容器;group 只负责远距隐藏。
         dup = cmds.duplicate(source_mesh, name=DUP_NAME, returnRootsOnly=True)[0]
@@ -79,7 +85,12 @@ class IsolatedMeshView:
 
         # 2) 专属相机 —— 给一个确定的 3/4 朝向,不再依赖"默认朝向 + viewFit"的不确定取景
         self.camera = cmds.camera(name=CAM_NAME)[0]
-        cmds.setAttr(f"{self.camera}.rotate", *_CAM_ROT)
+        if self._maya_up == "z":
+            from ..core.coord_convention import orbit_camera_world_matrix
+
+            cmds.xform(self.camera, worldSpace=True, matrix=orbit_camera_world_matrix("z"))
+        else:
+            cmds.setAttr(f"{self.camera}.rotate", *_CAM_ROT_Y)
 
         # 3) modelPanel,并把它的 QWidget 取出供窗口内嵌
         self.panel = cmds.modelPanel(menuBarVisible=False)
@@ -308,9 +319,11 @@ class IsolatedMeshView:
 
     def current_convention(self):
         """当前坐标约定对象(供指示器按约定摆放/标注轴)。"""
-        from ..core.coord_convention import CONVENTIONS
+        return self._conventions[self._coord_id]
 
-        return CONVENTIONS[self._coord_id]
+    def conventions(self) -> dict:
+        """本视口按 Maya 上方向轴构造的约定集(供窗口构建坐标系下拉)。"""
+        return self._conventions
 
     def set_coord_convention(self, convention_id: str) -> None:
         """切换目标坐标解释并更新视口中的坐标轴。
@@ -319,9 +332,8 @@ class IsolatedMeshView:
         ``show_channel`` 按 face-vertex 索引写颜色的逻辑。
         """
         cmds = _cmds()
-        from ..core.coord_convention import CONVENTIONS
 
-        conv = CONVENTIONS[convention_id]
+        conv = self._conventions[convention_id]
         self._coord_id = convention_id
         self._update_origin_axes(conv)
         cmds.refresh()
@@ -342,7 +354,7 @@ class IsolatedMeshView:
         """
         cmds = _cmds()
         from ..core.context import InspectionContext
-        from ..core.coord_convention import CONVENTIONS, flip_uv_v
+        from ..core.coord_convention import flip_uv_v
         from ..core.mesh_data import MeshData
         from ..core.types import RuleResult
 
@@ -350,7 +362,7 @@ class IsolatedMeshView:
             role: source_view.read_channel(ch) for role, ch in rule.channel_roles.items()
         }
         # 解码前按当前坐标约定同步转换 UV 空间(UE 的 V→1-V);预览与校验因此一致。
-        flip_uv_v(channels, CONVENTIONS[self._coord_id], self._convert_uv)
+        flip_uv_v(channels, self._conventions[self._coord_id], self._convert_uv)
         decoded = rule.decoder.decode(channels)
 
         dup_view = MeshData(self.dup)

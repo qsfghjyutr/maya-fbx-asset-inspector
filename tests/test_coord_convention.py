@@ -6,11 +6,16 @@ from fbx_inspector.core.channel import Channel, ChannelData, SourceType
 from fbx_inspector.core.coord_convention import (
     CONVENTIONS,
     IDENTITY,
+    MAYA_TO_UE,
     apply3x3,
     axis_label_map,
+    conventions_for,
     determinant3x3,
     flip_uv_v,
+    maya_to_ue_matrix,
+    orbit_camera_world_matrix,
     to_maya_matrix44,
+    view_rotation_from_matrix,
 )
 
 
@@ -124,3 +129,71 @@ def test_flip_uv_v_does_not_touch_color_set_channels():
     cd = _color_channel_data([0.25, 0.75])
     flip_uv_v({"in": cd}, CONVENTIONS["ue"], enabled=True)
     assert cd.components["R"] == [0.25, 0.75]
+
+
+# —— Maya 世界上方向轴(Y-up / Z-up)兼容 ——
+
+
+def test_conventions_for_y_matches_baseline():
+    # Y-up 路径逐位等于历史常量,现有行为不变。
+    convs = conventions_for("y")
+    assert convs["maya"].up_axis == "Y"
+    assert convs["maya"].matrix == IDENTITY
+    assert convs["ue"].matrix == MAYA_TO_UE
+    assert convs["ue"].is_mirror is True
+    # 顶层 CONVENTIONS 就是 Y-up 基线。
+    assert CONVENTIONS["ue"].matrix == MAYA_TO_UE
+
+
+def test_conventions_for_z_maya_reference():
+    convs = conventions_for("z")
+    maya = convs["maya"]
+    assert maya.up_axis == "Z"
+    assert maya.matrix == IDENTITY
+    assert maya.handedness == "right"
+    assert maya.is_mirror is False
+
+
+def test_conventions_for_z_ue_degenerates_to_chirality_only():
+    ue = conventions_for("z")["ue"]
+    # Maya 已是 Z-up:Y-up→Z-up 旋转退化,只剩取反 Y 的手性翻转 diag(1,-1,1)。
+    assert ue.matrix == ((1.0, 0.0, 0.0), (0.0, -1.0, 0.0), (0.0, 0.0, 1.0))
+    assert ue.up_axis == "Z"
+    assert ue.is_mirror is True
+    assert ue.flip_uv_v is True
+    # UE 的上方向 Z 与 Maya 一致(不动),Y 被镜像。
+    assert ue.apply((0.0, 0.0, 1.0)) == (0.0, 0.0, 1.0)
+    assert ue.apply((0.0, 1.0, 0.0)) == (0.0, -1.0, 0.0)
+
+
+def test_maya_to_ue_matrix_case_insensitive():
+    assert maya_to_ue_matrix("Y") == maya_to_ue_matrix("y") == MAYA_TO_UE
+    assert maya_to_ue_matrix("Z") == maya_to_ue_matrix("z")
+
+
+def test_axis_label_map_z_up_maya_marks_z():
+    labels = axis_label_map(conventions_for("z")["maya"])
+    assert labels == {0: "X", 1: "Y", 2: "Z (Up)"}
+
+
+def _project_world_axis(m16, world_axis):
+    """把世界方向向量经相机世界矩阵投影到屏幕(screen_x, screen_y)。"""
+    view_rot = view_rotation_from_matrix(m16)
+    cam = apply3x3(view_rot, world_axis)
+    return cam[0], cam[1]  # 屏幕右为 +x,屏幕上为 +y
+
+
+def test_orbit_camera_puts_world_up_straight_up():
+    # 无 roll:世界上方向轴投影必须严格竖直(屏幕水平分量 ≈ 0),否则 Focus/取景会歪。
+    for up_axis, up_vec in (("z", (0.0, 0.0, 1.0)), ("y", (0.0, 1.0, 0.0))):
+        m16 = orbit_camera_world_matrix(up_axis)
+        sx, sy = _project_world_axis(m16, up_vec)
+        assert abs(sx) < 1e-6, f"{up_axis}-up 的上方向轴带了水平分量 sx={sx}"
+        assert sy > 0.5, f"{up_axis}-up 的上方向轴应朝屏幕上方 sy={sy}"
+
+
+def test_orbit_camera_right_vector_is_horizontal():
+    # 相机 right(第一行前三列)在 Z-up 下必须落在世界 XY 平面(Z 分量为 0)= 无 roll。
+    m16 = orbit_camera_world_matrix("z")
+    right_z = m16[2]
+    assert abs(right_z) < 1e-6

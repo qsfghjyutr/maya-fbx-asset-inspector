@@ -113,7 +113,6 @@ def _make_window_class():
     from ..core.mesh_data import MeshData
     from ..core.registry import PROFILES
     from ..report import build_report
-    from ..core.coord_convention import CONVENTIONS
     from ..visualize.base import RAMPS
     from ..visualize.viewport import DEFAULT_LABEL_COLOR
     from .axis_indicator import make_axis_indicator
@@ -228,7 +227,7 @@ def _make_window_class():
             coord_row = QtWidgets.QHBoxLayout()
             coord_row.addWidget(QtWidgets.QLabel("坐标系"))
             self._coord_combo = QtWidgets.QComboBox()
-            for cid, conv in CONVENTIONS.items():
+            for cid, conv in self._view.conventions().items():
                 self._coord_combo.addItem(conv.label, userData=cid)
             coord_row.addWidget(self._coord_combo)
             # UV 空间是否随坐标系同步转换(UE 导入器对 V 做 V→1-V);默认开。

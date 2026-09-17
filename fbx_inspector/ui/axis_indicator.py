@@ -2,7 +2,7 @@
 
 在隔离视口右上角画一个固定大小的小方块,里面是三色坐标轴,**随镜头 tumble 实时转动**,并**反映
 当前坐标约定**(切到 UE 时轴的朝向会真的转过去,不只是文字标签变)——类似 Blender/Unity 的导航
-gizmo。Maya 自带的角落轴永远显示 Maya 世界(Y-up),无法表达 UE 约定,故自绘。
+gizmo。Maya 自带的角落轴只显示 Maya 世界(Y-up 或 Z-up,取决于环境设置),无法表达 UE 约定,故自绘。
 
 颜色和标签始终绑定 X/Y/Z 轴身份:X 红 / Y 绿 / Z 蓝。切换坐标约定时只变换三根箭头的方向;
 若方向和标签同时交换,UE 的镜像会被视觉抵消,使左手系错误地显示成右手系。
@@ -65,7 +65,7 @@ def project_axes(view_rot: Matrix3, convention: CoordConvention) -> list[Project
     out: list[ProjectedAxis] = []
     for i in range(3):
         basis = tuple(1.0 if j == i else 0.0 for j in range(3))
-        # 将目标引擎坐标轴嵌入 Maya 固定的 Y-up 视口（目标引擎→Maya 显示空间）。
+        # 将目标引擎坐标轴嵌入 Maya 当前世界视口（Y-up 或 Z-up）（目标引擎→Maya 显示空间）。
         world_dir = apply3x3(convention.viewport_basis, basis)  # type: ignore[arg-type]
         cam = apply3x3(view_rot, world_dir)
         # Keep the original axis identity after transforming its direction.
